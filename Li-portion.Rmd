@@ -1,0 +1,246 @@
+---
+title: "Li-portion"
+output: html_notebook
+---
+
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Load packages
+#install.packages("tidyr")
+library(tidyr)
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("readr")
+library(readr)
+#install.packages("PortfolioAnalytics")
+library(PortfolioAnalytics)
+#install.packages("ROI")
+library(ROI)
+#install.packages("ROI.plugin.quadprog")
+library(ROI.plugin.quadprog)
+#install.packages("ROI.plugin.glpk")
+library(ROI.plugin.glpk)
+#install.packages('quantmod')
+#install.packages('TTR')
+library('TTR')
+library('quantmod')
+
+library(PerformanceAnalytics)
+library(quantmod)
+#install.packages("tidyquant")
+library(tidyquant)
+library(xts) 
+library(ggplot2)
+#install.packages("highcharter")
+library(highcharter)
+library(purrr)
+library(dplyr)
+#install.packages("fredr")
+library(fredr)
+#install.packages("FSA")
+library(FSA)
+library(fPortfolio)
+library(corpcor)
+
+start_date = "2015-01-01"
+end_date = "2020-12-31"
+```
+
+
+1. Fred Data
+```{r}
+#API Key = 75711c32cc2177d3a651e1cef5d26d6a
+fredr_set_key("75711c32cc2177d3a651e1cef5d26d6a")
+
+# Consumer Price Index for All Urban Consumers: All Items in U.S. City Average (CPIAUCSL)	
+
+CPIAUCSL <- fredr(
+  series_id = "CPIAUCSL",
+  observation_start = as.Date(start_date),
+  observation_end = as.Date(end_date)
+)
+
+cpi = subset(CPIAUCSL , select = c(value, date))
+
+ts_cpi = as.xts(cpi)
+chart_Series(ts_cpi , name="CPI")
+```
+"BRK-B": Berkshire Hathaway
+"APPL": Apple
+"VOO" (.03% fee): SPY with a lower fee
+"QCOM": Qualcomm (RF)
+"BIV" (.04% fee): Bonds
+"WMT": Walmart
+"JCPNQ": JC Penny
+"CDNS": Cadence
+"KEYS": Keysight
+"GE": General Electric
+"GIS": General Mills
+"MS": Morgan Stanley
+"GS": Goldman Sachs
+"CS": Credit Suisse
+"VIXM": VIX midterm futures (varying expense ratio)
+
+Expense Ratios:
+```{r, echo = FALSE}
+library(rvest)
+get_etf_data <- function(ticker) {
+  # construct the url for the ETF page on etfdb.com
+  url <- paste0("https://etfdb.com/etf/", ticker, "/#etf-ticker-profile")
+
+  # scrape the expense ratio and AUM from the page
+  page <- read_html(url)
+  expense_ratio <- page %>%
+    html_node("div#overview div:nth-child(4) div:nth-child(2)") %>%
+    html_text() %>%
+    trimws() 
+  
+  split_string <- strsplit(expense_ratio, "(?<=Largest \\(AUM\\))\\s+", perl = TRUE)[[1]]
+  result <- strsplit(split_string[2], "\\s+\\$", perl = TRUE)[[1]]
+  ans <- strsplit(result[1], "\\s+", perl = TRUE)[[1]]
+  return(ans[2])
+}
+
+```
+```{r}
+Voofee <- get_etf_data("VOO")
+BIVfee <- get_etf_data("BIV")
+VIXMfee <- get_etf_data("VIXM")
+```
+
+Daily Returns
+```{r, echo = FALSE}
+tickers = c("BRK-B", "AAPL", "VOO", "QCOM", "BIV", "WMT", "CDNS", "KEYS", "GE", "GIS", "MS", "GS", "CS", "VIXM")
+
+pr_daily <- getSymbols(tickers, src = "yahoo",
+           from = start_date,
+           to = end_date,
+           auto.assign = TRUE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge)
+```
+
+```{r, echo = FALSE}
+pr_daily = as.xts(pr_daily)
+head(pr_daily)
+```
+
+Daily Log Returns
+```{r, echo = FALSE}
+rt_daily <- na.omit(Return.calculate(pr_daily, method = "log"))
+head(rt_daily)
+```
+
+
+Constrained Portfolio
+```{r, echo = FALSE}
+# Create Portfolio object which is essentially a list object
+low_exp_return_portfolio <- PortfolioAnalytics::portfolio.spec(assets = tickers)
+
+low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = low_exp_return_portfolio,
+  type = "full_investment")
+low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = low_exp_return_portfolio,
+  type = "box", min = -0.05, max = .7
+)
+low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = low_exp_return_portfolio,
+  type = "transaction cost", ptc = .001 #.1% transaction cost
+)
+low_exp_return_portfolio <- add.constraint(low_exp_return_portfolio, type = "position", 
+                       min_sum = 1, max_sum = 1.2)
+
+# Add objective to minimize variance
+low_exp_return_portfolio <- PortfolioAnalytics::add.objective(
+  portfolio = low_exp_return_portfolio,
+  # Minimize risk
+  type = "return",
+  name = "var"
+)
+
+```
+
+max portfolio
+```{r , echo = TRUE}
+
+global_min_portfolio <- PortfolioAnalytics::optimize.portfolio(
+  R = rt_daily,
+  portfolio = low_exp_return_portfolio,
+  optimize_method = "quadprog",
+  # Return additional information on the path or portfolios searched
+  trace = TRUE
+)
+# Examine returned portfolio list object
+global_min_portfolio
+
+
+```
+
+
+```{r Markowitz 5, echo = TRUE}
+
+# Set optimal weights
+weights <- pluck(.x = global_min_portfolio, "weights")
+# Check if the weights and symbols align
+tibble(weights, tickers)
+
+```
+
+```{r Markowitz 6, echo = TRUE}
+
+# Ensure that the weights vector sums up to 1
+tibble(weights, tickers) %>%
+  dplyr::summarize(total_weight = sum(weights))
+
+
+```
+
+
+
+```{r Markowitz 8, echo = TRUE}
+
+# Compute monthly portfolio returns
+portfolio_returns_xts_rebalanced <-
+  PerformanceAnalytics::Return.portfolio(
+    R = rt_daily,
+    weights = weights,
+    # Monthly re-balancing
+    reblance_on = "yearly",
+    # Use simple/arithmetic chaining to aggregate returns
+    geometric = FALSE
+  ) %>%
+  `colnames<-`("portfolio_returns")
+# Examine
+head(portfolio_returns_xts_rebalanced, 5)
+
+```
+```{r, echo = FALSE}
+
+chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
+
+```
+
+
+
+
+
+
+
+```{r, echo = FALSE}
+portfolio_returns_xts_rebalanced <-
+  PerformanceAnalytics::Return.portfolio(
+    R = pr_daily,
+    weights = weights,
+    # Monthly re-balancing
+    reblance_on = "yearly",
+    # Use simple/arithmetic chaining to aggregate returns
+    geometric = FALSE
+  ) %>%
+  `colnames<-`("portfolio_returns")
+# Examine
+head(portfolio_returns_xts_rebalanced, 5)
+
+chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
+```
