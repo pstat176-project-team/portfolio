@@ -1,0 +1,255 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Load packages
+#install.packages("tidyr")
+library(tidyr)
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("readr")
+library(readr)
+#install.packages("PortfolioAnalytics")
+library(PortfolioAnalytics)
+#install.packages("ROI")
+library(ROI)
+#install.packages("ROI.plugin.quadprog")
+library(ROI.plugin.quadprog)
+#install.packages("ROI.plugin.glpk")
+library(ROI.plugin.glpk)
+#install.packages('quantmod')
+#install.packages('TTR')
+library('TTR')
+library('quantmod')
+
+library(PerformanceAnalytics)
+library(quantmod)
+#install.packages("tidyquant")
+library(tidyquant)
+library(xts) 
+library(ggplot2)
+#install.packages("highcharter")
+library(highcharter)
+library(purrr)
+library(dplyr)
+#install.packages("fredr")
+library(fredr)
+#install.packages("FSA")
+library(FSA)
+library(fPortfolio)
+
+start_date = "2015-01-01"
+end_date = "2020-12-31"
+```
+
+
+1. Fred Data
+```{r}
+#API Key = 75711c32cc2177d3a651e1cef5d26d6a
+fredr_set_key("75711c32cc2177d3a651e1cef5d26d6a")
+
+# Consumer Price Index for All Urban Consumers: All Items in U.S. City Average (CPIAUCSL)	
+
+CPIAUCSL <- fredr(
+  series_id = "CPIAUCSL",
+  observation_start = as.Date(start_date),
+  observation_end = as.Date(end_date)
+)
+
+cpi = subset(CPIAUCSL , select = c(value, date))
+
+ts_cpi = as.xts(cpi)
+chart_Series(ts_cpi , name="CPI")
+```
+
+Stocks 
+
+Nvidia: "NVDA"
+Apple "AAPL"
+Google: "GOOG"
+Microsoft: "MSFT"
+Intel: "INTC"
+IBM: "IMB"
+SAP: "SAP
+Amazon: "AMZN"
+Oracle: "ORCL"
+Analog Devices: "ADI"
+3D Systems Corporation: "DDD"
+
+"NVDA", "AAPL", "GOOG", "MSFT", "INTC", "IMB", "SAP", "AMZN", "ORCL", "ADI", "DDD"
+
+
+
+
+Stocks 
+
+Nvidia: "NVDA"
+Apple "AAPL"
+Google: "GOOG"
+Microsoft: "MSFT"
+Intel: "INTC"
+IBM: "IMB"
+SAP: "SAP
+Amazon: "AMZN"
+Oracle: "ORCL"
+Analog Devices: "ADI"
+3D Systems Corporation: "DDD"
+
+"NVDA", "AAPL", "GOOG", "MSFT", "INTC", "IMB", "SAP", "AMZN", "ORCL", "ADI", "DDD"
+
+
+
+Daily Returns
+```{r}
+tickers = c("NVDA", "AAPL", "GOOG", "MSFT", "INTC", "IMB", "SAP", "AMZN", "ORCL", "ADI", "DDD")
+
+pr_daily <- getSymbols(tickers, src = "yahoo",
+           from = start_date,
+           to = end_date,
+           auto.assign = TRUE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge)
+
+pr_daily = as.xts(pr_daily)
+head(pr_daily)
+
+```
+
+Daily Log Returns
+```{r}
+rt_daily <- na.omit(Return.calculate(pr_daily, method = "log"))
+head(rt_daily)
+
+```
+
+Constrained Portfolio
+```{r}
+
+# Create Portfolio object which is essentially a list object
+high_exp_return_portfolio <- PortfolioAnalytics::portfolio.spec(assets = tickers)
+typeof(high_var_portfolio)
+
+
+# Add the full investment constraint that specifies that the weights must sum to 1
+high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = high_exp_return_portfolio,
+  type = "full_investment"
+)
+
+# Add the box constraint that ensure the weights are between 0.1 and 0.6
+high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = high_exp_return_portfolio,
+  type = "long_only"
+)
+
+# Add the box constraint that ensure the weights are between 0.1 and 0.6
+high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = high_exp_return_portfolio,
+  type = "transaction_cost", ptc = .01
+)
+
+
+
+# Add objective to minimize variance
+high_exp_return_portfolio <- PortfolioAnalytics::add.objective(
+  portfolio = high_exp_return_portfolio,
+  # Minimize risk
+  type = "return",
+  name = "mean"
+)
+
+```
+
+max portfolio
+```{r , echo = TRUE}
+
+global_max_portfolio <- PortfolioAnalytics::optimize.portfolio(
+  R = rt_daily,
+  portfolio = high_exp_return_portfolio,
+  # This defaults to the "glpk" solver
+  optimize_method = "glpk",
+  # Return additional information on the path or portfolios searched
+  trace = TRUE
+)
+# Examine returned portfolio list object
+global_max_portfolio
+
+
+```
+
+
+```{r Markowitz 5, echo = TRUE}
+
+# Set optimal weights
+weights <- pluck(.x = global_max_portfolio, "weights")
+# Check if the weights and symbols align
+tibble(weights, tickers)
+
+```
+
+```{r Markowitz 6, echo = TRUE}
+
+# Ensure that the weights vector sums up to 1
+tibble(weights, tickers) %>%
+  dplyr::summarize(total_weight = sum(weights))
+
+
+```
+
+
+
+```{r Markowitz 8, echo = TRUE}
+
+# Compute monthly portfolio returns
+portfolio_returns_xts_rebalanced <-
+  PerformanceAnalytics::Return.portfolio(
+    R = rt_daily,
+    weights = weights,
+    # Monthly re-balancing
+    reblance_on = "yearly",
+    # Use simple/arithmetic chaining to aggregate returns
+    geometric = FALSE
+  ) %>%
+  `colnames<-`("portfolio_returns")
+# Examine
+head(portfolio_returns_xts_rebalanced, 5)
+
+```
+```{r}
+
+chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
+
+```
+
+
+
+
+
+
+
+```{r}
+portfolio_returns_xts_rebalanced <-
+  PerformanceAnalytics::Return.portfolio(
+    R = pr_daily,
+    weights = weights,
+    # Monthly re-balancing
+    reblance_on = "yearly",
+    # Use simple/arithmetic chaining to aggregate returns
+    geometric = FALSE
+  ) %>%
+  `colnames<-`("portfolio_returns")
+# Examine
+head(portfolio_returns_xts_rebalanced, 5)
+
+chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
+```
+
+
+
+
+
+
