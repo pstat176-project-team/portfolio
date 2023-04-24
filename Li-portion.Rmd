@@ -3,6 +3,7 @@ title: "Li-portion"
 output: html_notebook
 ---
 
+
 ```{r setup, include=FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 
@@ -99,7 +100,8 @@ get_etf_data <- function(ticker) {
   split_string <- strsplit(expense_ratio, "(?<=Largest \\(AUM\\))\\s+", perl = TRUE)[[1]]
   result <- strsplit(split_string[2], "\\s+\\$", perl = TRUE)[[1]]
   ans <- strsplit(result[1], "\\s+", perl = TRUE)[[1]]
-  return(ans[2])
+  ans <- strsplit(ans[2], "\\%", perl = TRUE)[[1]]
+  return(as.numeric(ans[1])/100)
 }
 
 ```
@@ -107,11 +109,16 @@ get_etf_data <- function(ticker) {
 Voofee <- get_etf_data("VOO")
 BIVfee <- get_etf_data("BIV")
 VIXMfee <- get_etf_data("VIXM")
+fees <- c(Voofee,BIVfee, VIXMfee)
+for (i in seq(length(tickers) - 3)){
+  fees <- c(fees, 0)
+}
+fees
 ```
 
 Daily Returns
 ```{r, echo = FALSE}
-tickers = c("BRK-B", "AAPL", "VOO", "QCOM", "BIV", "WMT", "CDNS", "KEYS", "GE", "GIS", "MS", "GS", "CS", "VIXM")
+tickers = c("VOO", "BIV", "VIXM", "BRK-B", "AAPL", "QCOM", "WMT", "CDNS", "KEYS", "GE", "GIS", "MS", "GS", "CS")
 
 pr_daily <- getSymbols(tickers, src = "yahoo",
            from = start_date,
@@ -162,11 +169,22 @@ low_exp_return_portfolio <- PortfolioAnalytics::add.objective(
 
 ```
 
+
+Need some function to adjust returns due to fees:
+```{R}
+adjust_returns <- function(rets, fees) {
+  adj_rets <- rets - fees
+  return(adj_rets)
+}
+adj_rt_daily <- adjust_returns(rt_daily, fees)
+```
+
+
 max portfolio
 ```{r , echo = TRUE}
 
 global_min_portfolio <- PortfolioAnalytics::optimize.portfolio(
-  R = rt_daily,
+  R = adj_rt_daily, #need to replace with some adjusted return function
   portfolio = low_exp_return_portfolio,
   optimize_method = "quadprog",
   # Return additional information on the path or portfolios searched
@@ -174,8 +192,6 @@ global_min_portfolio <- PortfolioAnalytics::optimize.portfolio(
 )
 # Examine returned portfolio list object
 global_min_portfolio
-
-
 ```
 
 
@@ -207,7 +223,7 @@ portfolio_returns_xts_rebalanced <-
     R = rt_daily,
     weights = weights,
     # Monthly re-balancing
-    reblance_on = "yearly",
+    reblance_on = "monthly",
     # Use simple/arithmetic chaining to aggregate returns
     geometric = FALSE
   ) %>%
@@ -217,9 +233,7 @@ head(portfolio_returns_xts_rebalanced, 5)
 
 ```
 ```{r, echo = FALSE}
-
 chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
-
 ```
 
 
@@ -234,7 +248,7 @@ portfolio_returns_xts_rebalanced <-
     R = pr_daily,
     weights = weights,
     # Monthly re-balancing
-    reblance_on = "yearly",
+    reblance_on = "monthly",
     # Use simple/arithmetic chaining to aggregate returns
     geometric = FALSE
   ) %>%
