@@ -2,7 +2,11 @@
 title: "Li-portion"
 output: html_notebook
 ---
+Next steps:
 
+1) CPI constraint
+2) After adding that constraint, compare performance to SPY
+3) Draw conclusions basically & check 8 std. deviations
 
 ```{r setup, include=FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
@@ -17,6 +21,7 @@ library(readr)
 #install.packages("PortfolioAnalytics")
 library(PortfolioAnalytics)
 #install.packages("ROI")
+
 library(ROI)
 #install.packages("ROI.plugin.quadprog")
 library(ROI.plugin.quadprog)
