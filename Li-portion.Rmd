@@ -1,96 +1,60 @@
 ---
-title: "Li-portion"
-output: html_notebook
+title: "PSTAT 176/276 Project"
+output: pdf
+author: "William Li, Jiayue Chen, Parsa Hafezi"
 ---
-Next steps:
 
-1) CPI constraint
-2) After adding that constraint, compare performance to SPY
-3) Draw conclusions basically & check 8 std. deviations
+Executive Summary:
+
+
 
 ```{r setup, include=FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 
-# Load packages
-#install.packages("tidyr")
 library(tidyr)
-#install.packages("tidyverse")
 library(tidyverse)
-#install.packages("readr")
 library(readr)
-#install.packages("PortfolioAnalytics")
 library(PortfolioAnalytics)
-#install.packages("ROI")
-
 library(ROI)
-#install.packages("ROI.plugin.quadprog")
 library(ROI.plugin.quadprog)
-#install.packages("ROI.plugin.glpk")
 library(ROI.plugin.glpk)
-#install.packages('quantmod')
-#install.packages('TTR')
 library('TTR')
 library('quantmod')
-
 library(PerformanceAnalytics)
 library(quantmod)
-#install.packages("tidyquant")
 library(tidyquant)
 library(xts) 
 library(ggplot2)
-#install.packages("highcharter")
 library(highcharter)
 library(purrr)
 library(dplyr)
-#install.packages("fredr")
 library(fredr)
-#install.packages("FSA")
 library(FSA)
 library(fPortfolio)
 library(corpcor)
-
-start_date = "2015-01-01"
-end_date = "2020-12-31"
+library(rvest)
 ```
+```{r, echo = FALSE}
 
-
-1. Fred Data
-```{r}
+#Note that we needed to correct to extract monthly
+#Step 1 of 16. Note we were asked to extract for the year so that's why I did it this way
 #API Key = 75711c32cc2177d3a651e1cef5d26d6a
 fredr_set_key("75711c32cc2177d3a651e1cef5d26d6a")
 
 # Consumer Price Index for All Urban Consumers: All Items in U.S. City Average (CPIAUCSL)	
-
+start_date = "2015-01-01"
+end_date = "2020-12-31"
 CPIAUCSL <- fredr(
   series_id = "CPIAUCSL",
   observation_start = as.Date(start_date),
-  observation_end = as.Date(end_date)
+  observation_end = as.Date(end_date),
+  frequency = "m"
 )
-
 cpi = subset(CPIAUCSL , select = c(value, date))
-
-ts_cpi = as.xts(cpi)
-chart_Series(ts_cpi , name="CPI")
+ts_cpi_all = as.xts(cpi)
 ```
-"BRK-B": Berkshire Hathaway
-"APPL": Apple
-"VOO" (.03% fee): SPY with a lower fee
-"QCOM": Qualcomm (RF)
-"BIV" (.04% fee): Bonds
-"WMT": Walmart
-"JCPNQ": JC Penny
-"CDNS": Cadence
-"KEYS": Keysight
-"GE": General Electric
-"GIS": General Mills
-"MS": Morgan Stanley
-"GS": Goldman Sachs
-"CS": Credit Suisse
-"VIXM": VIX midterm futures (varying expense ratio)
-
-Expense Ratios:
 ```{r, echo = FALSE}
-library(rvest)
+#expense ratios
 get_etf_data <- function(ticker) {
   # construct the url for the ETF page on etfdb.com
   url <- paste0("https://etfdb.com/etf/", ticker, "/#etf-ticker-profile")
@@ -110,12 +74,105 @@ get_etf_data <- function(ticker) {
 }
 
 ```
+```{R, echo = FALSE}
+#adjust returns
+adjust_returns <- function(rets, fees) {
+  adj_rets <- rets - fees
+  return(adj_rets)
+}
+```
+```{r, echo = FALSE, include = FALSE}
+#Step 2/16- set returns for the portfolio
+start_date = "2014-12-01" #modify to deal with NAs
+end_date = "2020-12-31"
+CPIAUCSL <- fredr(
+  series_id = "CPIAUCSL",
+  observation_start = as.Date(start_date),
+  observation_end = as.Date(end_date),
+  frequency = "m"
+)
+cpi = subset(CPIAUCSL , select = c(value, date))
+ts_cpi_all = as.xts(cpi)
+
+# Inflation rate
+ts_inflation <- na.omit(diff(log(ts_cpi_all))) #same as Return.calculate(ts_cpi_all, method = "log")
+
+# Basis point spread target objective returns for each month
+bp_spread_lr <- 0
+bp_spread_med <- 100
+bp_spread_hi <- 400 #Set some arbitrary value greater than 300 that is reasonable
+
+# Target returns
+ts_lr_returns <- ts_inflation + (bp_spread_lr/10000)
+ts_med_returns <- ts_inflation + (bp_spread_med/10000)
+ts_hi_returns <- ts_inflation + (bp_spread_hi/10000)
+head(ts_lr_returns)
+```
+```{r, echo = FALSE, include = FALSE}
+# Step 3 & 4:Daily Returns
+start_date = "2014-07-03"  #to deal with nas in rolling returns. 
+# Can just select the first point out if you only want 2015-01-01 as start.
+end_date = "2020-12-31"
+temp <- getSymbols("DIA", src = "yahoo",from = start_date,to = end_date,auto.assign = TRUE) 
+temp <- getSymbols("ULST", src = "yahoo",from = start_date,to = end_date,auto.assign = TRUE)
+temp <- getSymbols("SPY", src = "yahoo",from = start_date,to = end_date, auto.assign = TRUE) 
+DIA_all <- DIA$DIA.Close
+ULST_all <- ULST$ULST.Close
+SPY_all <- SPY$SPY.Close
+DIA_all <- as.xts(DIA_all)
+ULST_all <- as.xts(ULST_all)
+SPY_all <- as.xts(SPY_all)
+head(DIA_all)
+```
+```{R, echo = FALSE, include = FALSE}
+#step 5: daily log returns
+rt_SPY_close_daily <- Return.calculate(SPY_all, method = "log")
+rt_DIA_close_daily <- Return.calculate(DIA_all, method = "log")
+rt_ULST_close_daily <- Return.calculate(ULST_all, method = "log")
+n <- nrow(rt_ULST_close_daily)
+
+#adjust for time, keep the other part around for next step
+rt_SPY_close_daily_time <- rt_SPY_close_daily[127:(n),]
+rt_DIA_close_daily_time <- rt_DIA_close_daily[127:(n),]
+rt_ULST_close_daily_time <- rt_ULST_close_daily[127:(n),]
+head(rt_SPY_close_daily_time)
+head(rt_DIA_close_daily_time)
+head(rt_ULST_close_daily_time)
+tail(rt_SPY_close_daily_time)
+tail(rt_DIA_close_daily_time)
+tail(rt_ULST_close_daily_time)
+```
+```{R, echo = FALSE, include = FALSE}
+#step 6: drawdown concern/constraint
+sd_window <- 126 # 6 months of trading days
+sd_daily_SPY <- na.omit(rollapply(rt_SPY_close_daily, width = sd_window, FUN = sd, align = "right", fill = NA))
+sd_daily_DIA <- na.omit(rollapply(rt_DIA_close_daily, width = sd_window, FUN = sd, align = "right", fill = NA))
+sd_daily_ULST <- na.omit(rollapply(rt_ULST_close_daily, width = sd_window, FUN = sd, align = "right", fill = NA))
+sd_daily_SPY
+```
+
+The below needs to be made correct. It isn't correct. 
+
+
+First, we will note our asset selection for our low-risk portfolio. We will not apply asset rotations since this portfolio is not trying to chase yield. The two key components of a low risk portfolio that beats out CPI, or inflation, is considered to be bond heavy. Since Vanguards BIV ETF has the lowest fee (up to this year) through a little known patent, I chose it. Note this is an investment into medium term bonds only, so to deal with that risk we will consider short term bonds through the "VBIRX", or Vanguard's short term bond index as well. We will additionally consider Berkshire Hathaway as an investment, as it provides a diversified set of companies in the case the fixed income market declines, as typically when bonds go down equities go up, as well as the S&P 500 through VOO since VOO has a lower fee than SPY. Note the previous statement has not been true as of 2022, since there has been a historic change in the valuation of the dollar. 
+Lastly, we will increase our asset allocation in key areas of gold, technology, and general consumer appliances. This can be done through GLD, the SPDR gold ETF, for precious metals allocation. We will also consider Cadence for EDA and General Electric for legacy technologies, as well as APPL for general consumer appliances & utility. We will further consider General Mills and Walmart because people like food and low cost goods, and there two are major brands in that area.  
+
+
+Tickers: "BIV", "VBIRX",  "VOO", "GLD", "BRK-B", "CDNS", "GE", "APPL", "GIS", "WMT"
+
+
+```{R, echo = FALSE, include = FALSE}
+#Step 7: read daily CLOSE prices for all assets
+```
+
+Expense Ratios:
 ```{r}
+tickers = c("VOO", "BIV", "BRK-B", "AAPL", "QCOM", "WMT", "CDNS", "KEYS", "GE", "GIS", "MS", "GS", "CS")
 Voofee <- get_etf_data("VOO")
 BIVfee <- get_etf_data("BIV")
-VIXMfee <- get_etf_data("VIXM")
-fees <- c(Voofee,BIVfee, VIXMfee)
-for (i in seq(length(tickers) - 3)){
+#VIXMfee <- get_etf_data("VIXM")
+fees <- c(Voofee,BIVfee)#, VIXMfee)
+for (i in seq(length(tickers) - 2)){
   fees <- c(fees, 0)
 }
 fees
@@ -123,7 +180,6 @@ fees
 
 Daily Returns
 ```{r, echo = FALSE}
-tickers = c("VOO", "BIV", "VIXM", "BRK-B", "AAPL", "QCOM", "WMT", "CDNS", "KEYS", "GE", "GIS", "MS", "GS", "CS")
 
 pr_daily <- getSymbols(tickers, src = "yahoo",
            from = start_date,
@@ -145,6 +201,8 @@ head(rt_daily)
 ```
 
 
+
+
 Constrained Portfolio
 ```{r, echo = FALSE}
 # Create Portfolio object which is essentially a list object
@@ -163,26 +221,23 @@ low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
 )
 low_exp_return_portfolio <- add.constraint(low_exp_return_portfolio, type = "position", 
                        min_sum = 1, max_sum = 1.2)
-
-# Add objective to minimize variance
 low_exp_return_portfolio <- PortfolioAnalytics::add.objective(
   portfolio = low_exp_return_portfolio,
   # Minimize risk
   type = "return",
-  name = "var"
+  name = "mean",
+  target = .003
 )
 
+# Add objective to minimize variance
+#low_exp_return_portfolio <- PortfolioAnalytics::add.objective(
+#  portfolio = low_exp_return_portfolio,
+#  # Minimize risk
+#  type = "return",
+#  name = "var")
+
 ```
 
-
-Need some function to adjust returns due to fees:
-```{R}
-adjust_returns <- function(rets, fees) {
-  adj_rets <- rets - fees
-  return(adj_rets)
-}
-adj_rt_daily <- adjust_returns(rt_daily, fees)
-```
 
 
 max portfolio
@@ -191,9 +246,10 @@ max portfolio
 global_min_portfolio <- PortfolioAnalytics::optimize.portfolio(
   R = adj_rt_daily, #need to replace with some adjusted return function
   portfolio = low_exp_return_portfolio,
-  optimize_method = "quadprog",
+  optimize_method = "ROI",
   # Return additional information on the path or portfolios searched
-  trace = TRUE
+  trace = TRUE,
+  #maxSR=TRUE
 )
 # Examine returned portfolio list object
 global_min_portfolio
