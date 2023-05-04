@@ -1,0 +1,288 @@
+---
+title: "PSTAT176FinalProject"
+author: "JiayueChen"
+date: "2023-04-23"
+output: html_document
+---
+
+Designing Portfolio
+
+1.  Asset Markets Selection 15max
+
+-   The first asset market that people have in mind for investment is always equity market: Equity markets have historically provided higher long-term returns compared to other investment markets such as fixed income or real estate, and investing in equity markets can provide diversification across a range of industries and sectors, which can help to spread out investment risk. Additionally, equity markets are highly liquid, meaning that investors can buy and sell stocks quickly and easily, providing greater flexibility in managing their investment portfolio. These characteristics make equity markets a popular choice for investors looking for potential higher returns, diversification, and liquidity.
+
+Since it's a moderate growth strategy, my invest target is on stock of large, well-established companies, which called blue-chip stocks. Also, industry that provides essential products or services that are in demand regardless of economic condition are perfect fit for moderate growth strategy. 
+
+Consumer Industry: Costco(COST), Walmart(WMT),The Coca-Cola Company(KO),PepsiCo, Inc. (PEP)
+
+Healthcare: Pfizer(PFE); Johnson & Johnson(JNJ),UnitedHealth Group Incorporated (UNH),Eli Lilly and Company (LLY)
+
+Utilities (Companies that provide essential services such as electricity, gas, and water. These companies are often regulated and have stable, predictable revenue streams): Consolidated Edison(ED), NextEra Energy(NEE)
+
+Technology: Microsoft(MSFT), Apple(AAPL),Taiwan Semiconductor Manufacturing Company Limited(TSM),NVIDIA corporation(NVDA)
+# MORE SPECIFIC!!!!! see lecture video
+
+
+-   Further from equity market, investing in commodity market is a good way for investor to hedge inflation(some commodities' values,such as gold,may increase during time of inflation) and we should also consider investing in commodity market. I will put the assets in commodity market in Exchange Traded funds market part since I would like to invest in commodity market through commodity ETFs.
+
+-   Fixed income market has a lower risk of volatility compared to equity market and thus it's important to have asset investment in this market. I will also put the assets in fixed income market in Exchange Traded funds market part since I would like to invest in fixed income market through fixed income bonds ETFs.
+
+-   Lastly, Exchange Traded funds market assets are another important components for my portfolio. Its characteristic of low cost(lower management fees compared to actively managed funds) and liquidity make it an attractive field to invest in.
+
+Vanguard Consumer Staples ETF (VDC)
+Vanguard Total Bond Market Index Fund (BND)
+Vanguard Information Technology Index Fund (VGT)
+iShares Gold Trust (IAU)
+iShares Silver Trust (SLV)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Load packages
+#install.packages("tidyr")
+library(tidyr)
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("readr")
+library(readr)
+#install.packages("PortfolioAnalytics")
+library(PortfolioAnalytics)
+#install.packages("ROI")
+library(ROI)
+#install.packages("ROI.plugin.quadprog")
+library(ROI.plugin.quadprog)
+#install.packages("ROI.plugin.glpk")
+library(ROI.plugin.glpk)
+#install.packages('quantmod')
+#install.packages('TTR')
+library('TTR')
+library('quantmod')
+
+library(PerformanceAnalytics)
+library(quantmod)
+#install.packages("tidyquant")
+library(tidyquant)
+library(xts) 
+library(ggplot2)
+#install.packages("highcharter")
+library(highcharter)
+library(purrr)
+library(dplyr)
+#install.packages("fredr")
+library(fredr)
+#install.packages("FSA")
+library(FSA)
+```
+
+```{r}
+start_date = "2014-12-31" # will drop NA later
+end_date = "2020-12-31"
+```
+
+# Getting Data from FRED
+```{r FRED Datas, echo = TRUE}
+# FRED_API_KEY = ab27202799a83cd2409a1c45fac154c1
+
+fredr_set_key("ab27202799a83cd2409a1c45fac154c1")
+
+# Consumer Price Index for All Urban Consumers: All Items in U.S. City Average (CPIAUCSL)	
+cpi <- fredr(
+  series_id = "CPIAUCSL",
+  observation_start = as.Date(start_date),
+  observation_end = as.Date(end_date)
+)
+```
+
+```{r}
+cpi = subset(cpi , select = c(value, date))
+ts_cpi = as.xts(cpi)
+chart_Series(ts_cpi , name="CPI")
+```
+Stocks:
+Costco(COST)
+Walmart(WMT)
+The Coca-Cola Company(KO)
+PepsiCo, Inc. (PEP)
+Pfizer(PFE)
+Johnson & Johnson(JNJ)
+UnitedHealth Group Incorporated (UNH)
+Eli Lilly and Company (LLY)
+Consolidated Edison(ED)
+NextEra Energy(NEE)
+Microsoft(MSFT)
+Apple(AAPL)
+Taiwan Semiconductor Manufacturing Company Limited(TSM)
+NVIDIA corporation(NVDA)
+
+ETFs:
+Vanguard Consumer Staples ETF (VDC)
+Vanguard Total Bond Market Index Fund (BND)
+Vanguard Information Technology Index Fund (VGT)
+iShares Gold Trust (IAU)
+iShares Silver Trust (SLV)
+# efficent froniter for each year(used for rebalancing)
+
+# Daily Returns
+```{r}
+symbols = c("COST","WMT","KO","PEP","PFE","JNJ","UNH","LLY","ED","NEE","MSFT","AAPL","TSM","NVDA","VDC","BND","VGT","IAU","SLV")
+
+pr_daily <- getSymbols(symbols, src = "yahoo",
+           from = start_date,
+           to = end_date,
+           auto.assign = TRUE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge)
+
+head(pr_daily)
+```
+# compute Daily Log Returns
+```{r}
+rt_daily <- na.omit(Return.calculate(pr_daily, method = "log"))
+head(rt_daily)
+```
+# expense ratio
+ETFs(no need for rebalancing inside)
+# Portfolio Optimization: Mean-Variance Modern Portfolio Theory
+```{r}
+# we first want to convert daily prices to monthly return
+
+# Keep only the last reading of each month
+asset_returns_xts <- xts::to.monthly(
+  x = pr_daily,
+  drop.time = TRUE,
+  indexAt = "lastof",
+  OHLC = FALSE
+) %>%
+  # Compute simple returns
+  # Log returns are time-additive but not portfolio additive
+  PerformanceAnalytics::Return.calculate(method = "discrete") %>%
+  # Drop the first row since we lose 12/31/2014
+  stats::na.omit()
+# Keep only the xts returns, ticker symbols, and the prices series
+rm(list = setdiff(x = ls(), y = c("symbols", "prices", "asset_returns_xts")))
+
+# Examine the monthly simple returns for each asset
+head(x = asset_returns_xts, 5)
+```
+
+# Add Constraints to the Portfolio Object
+```{r}
+# Create Portfolio object which is essentially a list object
+min_var_portfolio <- PortfolioAnalytics::portfolio.spec(assets = symbols)
+typeof(min_var_portfolio)
+
+# Add the full investment constraint that specifies that the weights must sum to 1
+min_var_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = min_var_portfolio,
+  type = "full_investment"
+)
+
+# Examine the constraint element by extracting min_var_portfolio[["constraints"]][[1]]
+str(pluck(.x = min_var_portfolio, "constraints", 1))
+
+# Add the box constraint that ensure the weights are between 0.1 and 0.6
+min_var_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = min_var_portfolio,
+  type = "box", min = 0.01, max = 0.6
+)
+# Examine the constraint element by extracting min_var_portfolio[["constraints"]][[2]]
+str(pluck(.x = min_var_portfolio, "constraints", 2))
+```
+# Add Objective Function
+```{r}
+# Add objective to minimize variance
+min_var_portfolio <- PortfolioAnalytics::add.objective(
+  portfolio = min_var_portfolio,
+  # Minimize risk
+  type = "risk",
+  # A character corresponding to a function name, var()
+  name = "var"
+)
+```
+
+# Find two sets of optimal weights
+# 1. Optimization(by using optimize_method = "quadprog")to find optimal weights that minimize the variance
+```{r}
+# Run the optimization
+global_min_portfolio <- PortfolioAnalytics::optimize.portfolio(
+  R = asset_returns_xts,
+  portfolio = min_var_portfolio,
+  # This defaults to the "quadprog" solver
+  optimize_method = "quadprog",
+  # Return additional information on the path or portfolios searched
+  trace = TRUE
+)
+# Examine returned portfolio list object
+global_min_portfolio
+```
+# 2. Optimization(by using optimize_method = "glpk")to find optimal weights that maximize the expected return
+```{r}
+# Create Portfolio object
+max_exp_return_portfolio <- PortfolioAnalytics::portfolio.spec(assets = symbols)
+
+# Add the full investment constraint that specifies the weights must sum to 1
+max_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = max_exp_return_portfolio,
+  type = "full_investment"
+)
+# Add the box constraint that ensure the weights are between 0.1 and 0.6
+max_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = max_exp_return_portfolio,
+  type = "box", min = 0.01, max = 0.6
+)# change numbers 
+
+# Add objective to maximize mean returns
+max_exp_return_portfolio <- PortfolioAnalytics::add.objective(
+  portfolio = max_exp_return_portfolio,
+  # Maximize expected returns
+  type = "return",
+  # A character corresponding to a function name, mean()
+  name = "mean"
+)
+
+# Run the optimization
+global_max_portfolio <- PortfolioAnalytics::optimize.portfolio(
+  R = asset_returns_xts,
+  portfolio = max_exp_return_portfolio,
+  # This defaults to the "glpk" solver
+  optimize_method = "glpk",
+  # Return additional information on the path or portfolios searched
+  trace = TRUE
+)
+# Examine returned portfolio list object
+global_max_portfolio
+
+```
+
+# Building a Portfolio
+We have found two sets of optimal weights that yield portfolios that offer the lowest possible risk and the high possible expected return given two basic constraints. Our next task is to aggregate the monthly returns of the individual asset’s to find the monthly returns of our portfolio.
+```{r}
+# Set optimal weights
+weights <- pluck(.x = global_max_portfolio, "weights")
+# Check if the weights and symbols align
+tibble(weights, symbols) # 19 assets in total
+```
+```{r}
+# Ensure that the weights vector sums up to 1
+tibble(weights, symbols) %>%
+  dplyr::summarize(total_weight = sum(weights))
+```
+# Portfolio Monthly Return
+```{r}
+# Compute monthly portfolio returns
+portfolio_returns_xts_rebalanced_monthly <-
+  PerformanceAnalytics::Return.portfolio(
+    R = asset_returns_xts,
+    weights = weights,
+    # Monthly re-balancing
+    reblance_on = "months",
+    # Use simple/arithmetic chaining to aggregate returns
+    geometric = FALSE
+  ) %>%
+  `colnames<-`("Monthly_portfolio_returns")
+# Examine
+head(portfolio_returns_xts_rebalanced_monthly, 5)
+```
+
+
+
