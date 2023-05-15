@@ -10,7 +10,6 @@ Executive Summary:
 
 ```{r setup, include=FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-
 library(tidyr)
 library(tidyverse)
 library(readr)
@@ -18,8 +17,8 @@ library(PortfolioAnalytics)
 library(ROI)
 library(ROI.plugin.quadprog)
 library(ROI.plugin.glpk)
-library('TTR')
-library('quantmod')
+library(TTR)
+library(quantmod)
 library(PerformanceAnalytics)
 library(quantmod)
 library(tidyquant)
@@ -33,6 +32,10 @@ library(FSA)
 library(fPortfolio)
 library(corpcor)
 library(rvest)
+library(quadprog)  
+library(robust)
+library(fields)
+library(NMOF)
 ```
 ```{r, echo = FALSE}
 
@@ -142,8 +145,16 @@ tail(rt_SPY_close_daily_time)
 tail(rt_DIA_close_daily_time)
 tail(rt_ULST_close_daily_time)
 ```
+```{r, echo = FALSE}
+SPYfee <- get_etf_data("SPY")
+ULSTfee <- get_etf_data("ULST")
+DIAfee <- get_etf_data("DIA")
+rt_adj_SPY_close_daily_time <- adjust_returns(rt_SPY_close_daily_time, SPYfee)
+rt_adj_DIA_close_daily_time <- adjust_returns(rt_DIA_close_daily_time, DIAfee)
+rt_adj_ULST_close_daily_time <- adjust_returns(rt_ULST_close_daily_time, ULSTfee)
+```
 ```{R, echo = FALSE, include = FALSE}
-#step 6: drawdown concern/constraint
+#step 6: drawdown concern/constraint- std. dev
 sd_window <- 126 # 6 months of trading days
 sd_daily_SPY <- na.omit(rollapply(rt_SPY_close_daily, width = sd_window, FUN = sd, align = "right", fill = NA))
 sd_daily_DIA <- na.omit(rollapply(rt_DIA_close_daily, width = sd_window, FUN = sd, align = "right", fill = NA))
@@ -152,172 +163,610 @@ Tolerable_stdDev <- -8* sd_daily_SPY #note we can't have a loss that drops below
 Tolerable_stdDev
 ```
 
-First, we will note our asset selection for our low-risk portfolio. We will not apply asset rotations since this portfolio is not trying to chase yield. The two key components of a low risk portfolio that beats out CPI, or inflation, is considered to be bond heavy. Since Vanguards BIV ETF has the lowest fee (up to this year) through a little known patent, I chose it. Note this is an investment into medium term bonds only, so to deal with that risk we will consider short term bonds through the "VBIRX", or Vanguard's short term bond index as well. We will additionally consider Berkshire Hathaway as an investment, as it provides a diversified set of companies in the case the fixed income market declines, as typically when bonds go down equities go up, as well as the S&P 500 through VOO since VOO has a lower fee than SPY. Note the previous statement has not been true as of 2022, since there has been a historic change in the valuation of the dollar. 
-Lastly, we will increase our asset allocation in key areas of gold, technology, and general consumer appliances. This can be done through GLD, the SPDR gold ETF, for precious metals allocation. We will also consider Cadence for EDA and General Electric for legacy technologies, as well as APPL for general consumer appliances & utility. We will further consider General Mills and Walmart because people like food and low cost goods, and there two are major brands in that area.  
-
-
-Tickers: "BIV", "VBIRX",  "VOO", "GLD", "BRK-B", "CDNS", "GE", "APPL", "GIS", "WMT"
+First, we will note our asset selection for our low-risk portfolio. We will not apply asset rotations since this portfolio is not trying to chase yield. The two key components of a low risk portfolio that beats out CPI, or inflation, is considered to be bond heavy. Since Vanguards "BIV" ETF has the lowest fee (up to this year) through a little known patent, I chose it. Note this is an investment into medium term bonds only, so to deal with that risk we will consider short term bonds through the "BSV", or Vanguard's short term bond index as well. We will additionally consider Berkshire Hathaway as an investment, as it provides a diversified set of companies in the case the fixed income market declines, as typically when bonds go down equities go up, as well as the S&P 500 through "VOO" since "VOO" has a lower fee than SPY. Note the previous statement has not been true as of 2022, since there has been a historic change in the valuation of the dollar. 
+Lastly, we will increase our asset allocation in key areas of gold, technology, and general consumer appliances. This can be done through "GLD", the SPDR gold ETF, for precious metals allocation. We will also consider Cadence("CDNS") for EDA and General Electric ("GE") for legacy technologies, as well as Google ("GOOD") for cloud computing & utility. We will further consider General Mills ("GIS") and Walmart ("WMT") because people like food and low cost goods, and there two are major brands in that area.  
+We will further consider the cost of fertilizer through CF Industries Holdings, since the price of fertilizer is a major factor in the price of food ("CF").
 
 
 ```{R, echo = FALSE, include = FALSE}
 #Step 7: read daily CLOSE prices for all assets
-tickers = c("BIV", "VBIRX",  "VOO", "GLD", "BRK-B", "CDNS", "GE", "APPL", "GIS", "WMT")
+tickers = c("BIV", "BSV", "VOO", "GLD", "BRK-B", "CDNS", "GE", "GOOG", "GIS", "WMT", "CF", "V", "JPM", "AMZN", "MSFT", "JNJ", "PG")
 ```
-
-
-The below needs to be made correct. It isn't correct. 
-
-Expense Ratios:
-```{r}
-tickers = c("VOO", "BIV", "BRK-B", "AAPL", "QCOM", "WMT", "CDNS", "KEYS", "GE", "GIS", "MS", "GS", "CS")
-Voofee <- get_etf_data("VOO")
+```{r, echo = FALSE, include = FALSE}
+# Expense Ratios:
 BIVfee <- get_etf_data("BIV")
-#VIXMfee <- get_etf_data("VIXM")
-fees <- c(Voofee,BIVfee)#, VIXMfee)
-for (i in seq(length(tickers) - 2)){
+BSVfee <- get_etf_data("BSV")
+Voofee <- get_etf_data("VOO")
+GLDfee <- get_etf_data("GLD")
+fees <- c(BIVfee, BSVfee, Voofee,GLDfee)
+for (i in seq(length(tickers) - 4)){
   fees <- c(fees, 0)
 }
 fees
 ```
-
-Daily Returns
-```{r, echo = FALSE}
-
+```{r, echo = FALSE, include = FALSE}
+#8: Daily Returns: Close only
+start_date = "2014-04-03"
 pr_daily <- getSymbols(tickers, src = "yahoo",
            from = start_date,
            to = end_date,
            auto.assign = TRUE) %>% 
-  map(~Ad(get(.))) %>% 
+  map(~Cl(get(.))) %>% 
   reduce(merge)
-```
-
-```{r, echo = FALSE}
 pr_daily = as.xts(pr_daily)
-head(pr_daily)
-```
-
-Daily Log Returns
-```{r, echo = FALSE}
 rt_daily <- na.omit(Return.calculate(pr_daily, method = "log"))
-head(rt_daily)
+fee_adj_rt_daily <- adjust_returns(rt_daily, fees)
+fee_adj_rt_daily 
 ```
 
-
-
-
-Constrained Portfolio
+Here we graph the efficient frontier for 6 months of historical covariance. This particular efficient frontier is computed to show the distribution of assets at 2015-01-02.
 ```{r, echo = FALSE}
-# Create Portfolio object which is essentially a list object
-low_exp_return_portfolio <- PortfolioAnalytics::portfolio.spec(assets = tickers)
-
-low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
-  portfolio = low_exp_return_portfolio,
-  type = "full_investment")
-low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
-  portfolio = low_exp_return_portfolio,
-  type = "box", min = -0.05, max = .7
-)
-low_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
-  portfolio = low_exp_return_portfolio,
-  type = "transaction cost", ptc = .001 #.1% transaction cost
-)
-low_exp_return_portfolio <- add.constraint(low_exp_return_portfolio, type = "position", 
-                       min_sum = 1, max_sum = 1.2)
-low_exp_return_portfolio <- PortfolioAnalytics::add.objective(
-  portfolio = low_exp_return_portfolio,
-  # Minimize risk
-  type = "return",
-  name = "mean",
-  target = .003
-)
-
-# Add objective to minimize variance
-#low_exp_return_portfolio <- PortfolioAnalytics::add.objective(
-#  portfolio = low_exp_return_portfolio,
-#  # Minimize risk
-#  type = "return",
-#  name = "var")
-
+# Parts 9, 10, 11: Choose historical window of 6 months.
+# Calculate assets-log returns at each rebalance date, & construct covariance matrix at each rebalance date (1st of each month)
+# Set the window size to 126 trading days
+window_size <- 126
+# Calculate the 6-month rolling log returns
+rolling_returns_6month <- rollapply(fee_adj_rt_daily, width = window_size, FUN = function(x) sum(x), align = "right", fill = NA) #since logarithms are additive
+# Remove rows with missing values
+rolling_returns_6month <- na.omit(rolling_returns_6month)
+                                  
+# Get the indices of the first observation of each month
+month_endpoints <- endpoints(rolling_returns_6month, on = "months") + 1
+month_endpoints <- month_endpoints[1:(length(month_endpoints)-1)]
+# Subset the rolling_returns_6month object using the indices of the first observation of each month
+rolling_returns_6month_monthly <- rolling_returns_6month[month_endpoints]
+new_start_date = "2015-01-01"
+fee_adj_rt_monthly <- window(rolling_returns_6month_monthly, start = new_start_date)
+#fee_adj_rt_monthly <- window(rolling_returns_6month, start = new_start_date)
 ```
 
-
-
-max portfolio
-```{r , echo = TRUE}
-
-global_min_portfolio <- PortfolioAnalytics::optimize.portfolio(
-  R = adj_rt_daily, #need to replace with some adjusted return function
-  portfolio = low_exp_return_portfolio,
-  optimize_method = "ROI",
-  # Return additional information on the path or portfolios searched
-  trace = TRUE,
-  #maxSR=TRUE
-)
-# Examine returned portfolio list object
-global_min_portfolio
-```
-
-
-```{r Markowitz 5, echo = TRUE}
-
-# Set optimal weights
-weights <- pluck(.x = global_min_portfolio, "weights")
-# Check if the weights and symbols align
-tibble(weights, tickers)
-
-```
-
-```{r Markowitz 6, echo = TRUE}
-
-# Ensure that the weights vector sums up to 1
-tibble(weights, tickers) %>%
-  dplyr::summarize(total_weight = sum(weights))
-
-
-```
-
-
-
-```{r Markowitz 8, echo = TRUE}
-
-# Compute monthly portfolio returns
-portfolio_returns_xts_rebalanced <-
-  PerformanceAnalytics::Return.portfolio(
-    R = rt_daily,
-    weights = weights,
-    # Monthly re-balancing
-    reblance_on = "monthly",
-    # Use simple/arithmetic chaining to aggregate returns
-    geometric = FALSE
-  ) %>%
-  `colnames<-`("portfolio_returns")
-# Examine
-head(portfolio_returns_xts_rebalanced, 5)
-
-```
 ```{r, echo = FALSE}
-chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
+#calculate cov matrix for 2015-01-02
+new_start_date = "2015-01-02"  # Changing this changes the cov matrix & frontier
+fee_adj_rt_monthly <- window(rolling_returns_6month_monthly, start = new_start_date)
+
+sampCovRobMCD <- covRob(fee_adj_rt_monthly, estim = "mcd", quan = 0.95, ntrial = 10000)
+mu <- sampCovRobMCD$center
+varcov <- sampCovRobMCD$cov
+
+# Heatmap of the estimated variance-covariance matrix
+layout(matrix(c(1, 2), nrow = 1, byrow = TRUE), widths = c(4, 1))
+# Create the heatmap
+heatmap(varcov, Rowv = NA, Colv = NA, col = colorRampPalette(c("blue", "white", "red"))(25))
+# Create the legend
+image.plot(legend.only = TRUE, col = colorRampPalette(c("blue", "white", "red"))(25), zlim = range(varcov))
+# Number of assets
+nvar <- length(mu)
+
+# Number of efficient frontier points
+n.er <- 100  
+rset <- seq(min(mu), max(mu), length=n.er+2)
+rset <- rset[2:n.er+1]
+
+# Initialize variables to store results
+port.ret <- rset
+port.std <- rset*0
+port.wgt <- matrix(0, n.er, nvar)
+
+# Calculate efficient frontier using quadratic programming
+for (i in 1:(n.er-1)) {
+  Dmat <- 2*varcov
+  dvec <- rep(0, nvar) 
+  Amat <- t(rbind(t(rep(1, nvar)), t(mu), diag(nvar)))
+  bvec <- c(1, rset[i], rep(0, nvar))
+  
+  # Mean-variance optimization
+  m <- solve.QP(Dmat, dvec, Amat, bvec, meq = 2)
+  
+  # Store results
+  port.std[i]  <- sqrt(m$value)
+  port.wgt[i,] <- t(m$solution)
+}
+
+# Efficient frontier 
+plot(sqrt(diag(varcov)), mu, xlim=c(0.8*min(port.std),1.6*max(port.std)), 
+     ylim=c(1.2*min(mu), 1.2*max(mu)), col = rainbow(nvar), lwd = 10, 
+     xlab = expression(sigma), ylab = expression(mu))
+text(sqrt(diag(varcov)), mu, labels = tickers, cex= 1)
+lines(port.std, port.ret, col = "black", lwd = 1)
 ```
+```{r, echo = FALSE, include = FALSE} 
+# Now, we need to calculate MCD for all covariance matrices, not just time 01-02-2015!
 
-
-
-
-
+dim(fee_adj_rt_monthly) #is 72 x 11
+dim(varcov) #produces 11 x 11 covariance matrix at each time point.
+```
 
 
 ```{r, echo = FALSE}
-portfolio_returns_xts_rebalanced <-
-  PerformanceAnalytics::Return.portfolio(
-    R = pr_daily,
-    weights = weights,
-    # Monthly re-balancing
-    reblance_on = "monthly",
-    # Use simple/arithmetic chaining to aggregate returns
-    geometric = FALSE
-  ) %>%
-  `colnames<-`("portfolio_returns")
-# Examine
-head(portfolio_returns_xts_rebalanced, 5)
+# Set the start and end dates
+start_date <- as.Date("2015-01-01")
+end_date <- as.Date("2020-12-01")
 
-chart_Series(portfolio_returns_xts_rebalanced , name="Portfolio Returns")
+# Set the window size to 126 trading days
+window_size <- 126
+
+# Calculate the 6-month rolling returns at a daily time scale
+rolling_returns_6month <- rollapply(fee_adj_rt_daily, width = window_size, FUN = function(x) sum(x), align = "right", fill = NA)
+
+# Remove rows with missing values
+rolling_returns_6month <- na.omit(rolling_returns_6month)
+rolling_returns_6month_1 <- window(rolling_returns_6month, start = start_date)                           
+# Get the indices of the first observation of each month
+month_endpoints <- endpoints(rolling_returns_6month_1, on = "quarters") + 1
+month_endpoints <- month_endpoints[1:(length(month_endpoints)-1)]
+# Subset the rolling_returns_6month object using the indices of the first observation of each month
+#rolling_returns_6month_monthly <- rolling_returns_6month[month_endpoints]
+
+# Initialize a list to store the variance-covariance matrices
+mu_list <- list()
+varcov_list <- list()
+
+
+current_date <- index(rolling_returns_6month_1[month_endpoints[2]])
+current_date 
+
+fee_adj_rt_monthly <- window(rolling_returns_6month_1, start = current_date)
+  
+# Calculate the variance-covariance matrix
+sampCovRobMCD <- covRob(fee_adj_rt_monthly, estim = "mcd", quan = 0.95, ntrial = 10000)
+sampCovRobMCD
+```
+
+```{r, echo = FALSE}
+# Loop through each time period. Computes
+for (i in 1:60) {
+  
+  # Get the returns for the current time period
+  current_date <- index(rolling_returns_6month_1[month_endpoints[i]])
+  fee_adj_rt_monthly <- window(rolling_returns_6month_1, start = current_date)
+  
+  # Calculate the variance-covariance matrix
+  sampCovRobMCD <- covRob(fee_adj_rt_monthly, estim = "mcd", quan = 0.95, ntrial = 10000)
+  mu_list[[i]] <- sampCovRobMCD$center
+  varcov_list[[i]] <- sampCovRobMCD$cov
+  
+}
+
+# Convert the list to a 3D array
+varcov_array <- array(unlist(varcov_list), dim = c(nrow(fee_adj_rt_monthly), ncol(fee_adj_rt_monthly), length(varcov_list)))
+
+# Check the dimensions of the array
+dim(varcov_array)
+```
+
+
+
+```{r}
+library(gridExtra)
+
+# Define start and end dates
+start_date <- as.Date("2014-12-31")
+end_date <- as.Date("2020-12-31")
+
+# Define number of quarters
+nquarters <- as.numeric(as.yearqtr(end_date) - as.yearqtr(start_date)) * 4
+
+# Initialize list to store plots
+plots <- vector("list", nquarters)
+
+# Loop over each quarter
+for (i in seq_len(nquarters)) {
+  # Calculate start and end dates for current quarter
+  new_start_date <- as.Date(as.yearqtr(start_date) + (i-1)/4)
+  new_end_date <- as.Date(as.yearqtr(start_date) + i/4 - 1/365)
+  
+  # Calculate covariance matrix and efficient frontier for current quarter
+  #fee_adj_rt_monthly <- window(rolling_returns_6month_monthly, start = new_start_date)
+  #sampCovRobMCD <- covRob(fee_adj_rt_monthly, estim = "mcd", quan = 0.95, ntrial = 10000)
+  current_date <- index(rolling_returns_6month_1[month_endpoints[i]])
+  fee_adj_rt_monthly <- window(rolling_returns_6month_1, start = current_date)
+  
+  # Calculate the variance-covariance matrix
+  sampCovRobMCD <- covRob(fee_adj_rt_monthly, estim = "mcd", quan = 0.95, ntrial = 10000)
+  
+  
+  mu <- sampCovRobMCD$center
+  varcov <- sampCovRobMCD$cov
+  nvar <- length(mu)
+  n.er <- 100  
+  rset <- seq(min(mu), max(mu), length=n.er+2)
+  rset <- rset[2:n.er+1]
+  port.ret <- rset
+  port.std <- rset*0
+  port.wgt <- matrix(0, n.er, nvar)
+  for (j in 1:(n.er-1)) {
+    Dmat <- 2*varcov
+    dvec <- rep(0, nvar) 
+    Amat <- t(rbind(t(rep(1, nvar)), t(mu), diag(nvar)))
+    bvec <- c(1, rset[j], rep(0, nvar))
+    m <- solve.QP(Dmat, dvec, Amat, bvec, meq = 2)
+    port.std[j]  <- sqrt(m$value)
+    port.wgt[j,] <- t(m$solution)
+  }
+  
+  # Store plot in list
+  plots[[i]] <- plot(sqrt(diag(varcov)), mu, xlim=c(0.8*min(port.std),1.6*max(port.std)), 
+                     ylim=c(1.2*min(mu), 1.2*max(mu)), col = rainbow(nvar), lwd = 10, 
+                     xlab = expression(sigma), ylab = expression(mu))
+  text(sqrt(diag(varcov)), mu, labels = tickers, cex= 1)
+  lines(port.std, port.ret, col = "black", lwd = 1)
+}
+
+# Arrange plots in a grid
+gridExtra::grid.arrange(grobs = plots)
+
+```
+
+
+
+
+
+
+
+
+
+```{r, echo = FALSE}
+CPIAUCSL <- fredr(
+  series_id = "CPIAUCSL",
+  observation_start = as.Date("2014-12-01"),
+  observation_end = as.Date("2020-12-31")
+)
+
+# Make it into an xts file
+CPIAUCSL <- xts(CPIAUCSL$value, order.by = CPIAUCSL$date)
+
+# Storing CPIAUCSL data
+write.zoo(CPIAUCSL, file="CPIAUCSL.csv", sep=",")
+```
+```{r, echo = FALSE}
+CPIAUCSL <- xts(read.zoo("CPIAUCSL.csv", sep =","))
+```
+```{r, echo = FALSE}
+# Monthly inflation rate  
+rt_CPIAUCSL <- na.omit(Return.calculate(CPIAUCSL, method = "log"))
+
+# Target monthly portfolio returns across risk profiles
+options(scipen = 999)
+rt_target <- merge.xts(rt_CPIAUCSL+0.03, rt_CPIAUCSL+0.01, rt_CPIAUCSL)
+colnames(rt_target) <- c("Profile 1", "Profile 2", "Profile 3")
+head(rt_target)
+
+ben_symbols <- c("SPY", "DIA", "ULST")
+# Obtaining benchmark data
+start_date <- "2014-12-31"
+end_date <- "2020-12-31"
+df_Assets <- getSymbols(ben_symbols, from = start_date, to = end_date)
+
+# Storing the benchmark prices in one array
+prices_ben <- purrr::map(ben_symbols, function(x) Ad(get(x)))
+prices_ben <- purrr::reduce(prices_ben, merge)
+colnames(prices_ben) <- ben_symbols
+
+# Computing daily returns
+rt_ben <- na.omit(Return.calculate(prices_ben, method = "log"))
+
+# Target average daily return across risk profiles adjusted for the rebalancing period
+int <- 3
+rebal_per <- int
+diff_in_months <- (year(ymd(end_date))  - year(ymd(start_date))) * 12 +
+                  (month(ymd(end_date)) - month(ymd(start_date)))
+rebal_freq <- diff_in_months/rebal_per
+
+start_date_loop <- index(rt_ben[1,0])
+for (per in 1:rebal_freq) {
+  # Get time period
+  end_date_loop <- start_date_loop %m+% months(rebal_per)
+  end_date_loop <- end_date_loop - days(lubridate::day(end_date_loop))
+  if (per == 1){
+    start_date_loop <- start_date_loop - days(lubridate::day(start_date_loop)-1)  
+  }
+  
+  # Select rebalancing period
+  rt_rebal_per <- colSums(rt_target[paste0(start_date_loop, "/", end_date_loop)])
+  ct_day <- nrow(rt_ben[paste0(start_date_loop, "/", end_date_loop)])
+  dates <- index(rt_ben[paste0(start_date_loop, "/", end_date_loop)][,0])
+  
+  # Compute average target daily return 
+  if (per == 1) {
+    rt_tgt <- xts(matrix(rep(rt_rebal_per/ct_day, ct_day), nrow = ct_day, ncol = 3, 
+                         byrow = T), order.by = dates)
+    colnames(rt_tgt) <- c("Profile 1", "Profile 2", "Profile 3")
+  } else {
+    rt_tgt <- rbind(rt_tgt, xts(matrix(rep(rt_rebal_per/ct_day, ct_day), 
+                                    nrow = ct_day, ncol = 3, byrow = T), order.by = dates))
+  }
+
+  start_date_loop <- end_date_loop + days(1)
+}
+head(rt_tgt)
+```
+
+
+```{r, message = FALSE, echo = FALSE} 
+start_date <- "2014-12-31"
+end_date <- "2020-12-31"
+df_Assets <- getSymbols(tickers, from = start_date, to = end_date)
+
+# Storing the prices in one array
+prices <- purrr::map(tickers, function(x) Ad(get(x)))
+prices <- purrr::reduce(prices, merge)
+colnames(prices) <- tickers
+
+# Computing daily returns
+rt_daily <- na.omit(Return.calculate(prices, method = "log"))
+rt_daily <- adjust_returns(rt_daily, fees)
+```
+Rebal freq needs to be an integer!
+```{r, message = FALSE, echo = FALSE} 
+# Need to include Risk profiles 3
+set.seed(1)
+
+# Number of assets
+nvar <- length(tickers)
+
+# Rebalancing period in months
+rebal_per <- int
+diff_in_months <- (year(ymd(end_date))  - year(ymd(start_date))) * 12 +
+                  (month(ymd(end_date)) - month(ymd(start_date)))
+rebal_freq <- diff_in_months/rebal_per
+```
+```{r, echo = FALSE}
+# Decrease the start date date by 3 months
+prev_date <- ymd(start_date) %m-% months(rebal_per)
+
+# Obtaining stock data for the first portfolio weights
+df_Assets_init <- getSymbols(tickers, from = prev_date, to = start_date)
+prices_init <- purrr::map(tickers, function(x) Ad(get(x)))
+prices_init <- purrr::reduce(prices_init, merge)
+colnames(prices_init) <- tickers
+rt_daily_init <- na.omit(Return.calculate(prices_init, method = "log"))
+
+# Initializing portfolio weights
+port.wts <- matrix(0, rebal_freq, nvar)
+portRisk3.wts <- matrix(0, rebal_freq, nvar)
+portGMV.wts <- matrix(0, rebal_freq, nvar)
+
+# Computing the robust variance-covariance matrix
+sampCovRobMCD_init <- covRob(rt_daily_init, estim = "mcd", quan = .95, ntrial = 10000)
+mu_init <- sampCovRobMCD_init$center
+varcov_init <- sampCovRobMCD_init$cov
+
+# Specific target risk
+#if (FALSE) {
+  # Pick risk profile 3
+  tgt_pro_3 <- as.numeric(rt_tgt[index(rt_daily[1,]), 3])
+
+  # Efficient portfolio with target return for risk profile 3
+  efficient_portfolio <- tseries::portfolio.optim(x = rt_daily_init, pm = tgt_pro_3, 
+                            covmat = varcov_init, reshigh = rep(1.2, nvar), 
+                            reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE)
+  portRisk3.wts[1,] <- efficient_portfolio$pw
+#}
+
+# Minimum variance portfolio
+#if (FALSE) {
+  # This is a multiline comment block.
+  # The code inside this block will not be executed.
+  Sigma <- varcov_init
+  ones <- rep(1, ncol(Sigma)) # vector of ones
+  invSigma <- solve(Sigma) # inverse of covariance matrix
+
+  # Calculate weights for minimum variance portfolio
+  portGMV.wts[1,] <- t(invSigma %*% ones / sum(invSigma %*% ones))
+#}
+
+# Max Sharpe Portfolio with box constraints
+port.wts[1,] <- maxSharpe(m = as.numeric(mu_init), var = matrix(varcov_init, ncol = nvar), 
+                          wmin = -0.2, wmax = 1.2)
+
+start_date_loop <- index(rt_daily[1,0])
+for (rper in 2:rebal_freq) {
+  end_date_loop <- start_date_loop %m+% months(rebal_per)
+  
+  # Correct for day differences
+  end_date_loop <- end_date_loop - days(lubridate::day(end_date_loop))
+  window_returns <- rt_daily[paste0(start_date_loop, "/", end_date_loop)]
+  
+  # Computing the robust variance-covariance matrix
+  sampCovRobMCD <- covRob(rt_daily, estim = "mcd", quan = .95, ntrial = 10000)
+  mu <- sampCovRobMCD$center
+  varcov <- sampCovRobMCD$cov
+  
+  # Specific target risk
+  #if (FALSE) {
+  # Pick risk profile 3
+  # Use a time window of one week to adjust for weekend and other non-trading days 
+  tgt_pro_3 <- mean(as.numeric(rt_tgt[paste0(end_date_loop + days(1), "/", 
+                                             end_date_loop + days(7)), 3]))
+
+  # Efficient portfolio with target return = mean of returns
+  efficient_portfolio <- tseries::portfolio.optim(x = window_returns, pm = tgt_pro_3, 
+                                  covmat = varcov, reshigh = rep(1.2, nvar), 
+                                  reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE)
+  portRisk3.wts[rper,] <- efficient_portfolio$pw
+  #}
+  
+  # Get the minimum variance portfolio
+  #if (FALSE) {
+    # This is a multiline comment block.
+    # The code inside this block will not be executed.
+    Sigma <- varcov
+    ones <- rep(1, ncol(Sigma)) # vector of ones
+    invSigma <- solve(Sigma) # inverse of covariance matrix
+
+    # Calculate weights for minimum variance portfolio
+    portGMV.wts[rper,] <- t(invSigma %*% ones / sum(invSigma %*% ones))
+  #}
+  
+  # Max Sharpe Portfolio with box constraints
+  port.wts[rper,] <- maxSharpe(m = as.numeric(mu), var = matrix(varcov, ncol = nvar), 
+                          wmin = -0.2, wmax = 1.2)
+
+  start_date_loop <- end_date_loop + days(1)
+}
+par(mfrow = c(1,1), mar = c(3,2,2,3), xpd=TRUE)
+barplot(t(port.wts), col=rainbow(nvar), ylab = "Weights", beside = TRUE)
+legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
+
+par(mfrow = c(1,1), mar = c(3,2,2,3), xpd=TRUE)
+barplot(t(portRisk3.wts), col=rainbow(nvar), ylab = "Weights", beside = TRUE)
+legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
+
+par(mfrow = c(1,1), mar = c(3,2,2,3), xpd=TRUE)
+barplot(t(portGMV.wts), col=rainbow(nvar), ylab = "Weights", beside = TRUE)
+legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
+```
+
+```{r, message = FALSE, echo = FALSE} 
+# Manually computing portfolio returns
+rt_ptf <- rt_daily[,1]
+colnames(rt_ptf) <- "portfolio.return"
+for (i in 1:nrow(rt_daily)){
+  k <- ceiling(month(index(rt_daily[i,0]))/ rebal_per)
+  rt_ptf[i,] <- sum(port.wts[k,]*rt_daily[i,])
+}
+# Manually computing portfolio returns
+rt_ptfR3 <- rt_daily[,1]
+colnames(rt_ptfR3) <- "portfolio.return"
+for (i in 1:nrow(rt_daily)){
+  k <- ceiling(month(index(rt_daily[i,0]))/ rebal_per)
+  rt_ptfR3[i,] <- sum(portRisk3.wts[k,]*rt_daily[i,])
+}
+
+# Manually computing portfolio returns
+rt_ptfGMV <- rt_daily[,1]
+colnames(rt_ptfGMV) <- "portfolio.return"
+for (i in 1:nrow(rt_daily)){
+  k <- ceiling(month(index(rt_daily[i,0]))/ rebal_per)
+  rt_ptf[i,] <- sum(portGMV.wts[k,]*rt_daily[i,])
+}
+```
+
+```{r, echo = FALSE}  
+# Window of benchmark returns
+window <- 6
+
+benchmark <- "SPY"
+df_Assets <- getSymbols(benchmark, from = ymd(start_date) %m-% months(window), to = end_date)
+
+# Storing the prices in one array
+price_ben <- purrr::map(benchmark, function(x) Ad(get(x)))
+price_ben <- purrr::reduce(price_ben, merge)
+colnames(price_ben) <- benchmark
+
+# Computing daily benchmark returns
+rt_daily_ben <- na.omit(Return.calculate(price_ben, method = "log"))
+
+idx <- which(index(rt_daily_ben[,0]) == index(rt_ptf[1,0]))
+win_day <- length(rt_daily_ben)-length(rt_ptf)
+```
+```{r, echo = FALSE}  
+for (i in idx:length(rt_daily_ben)){
+  # Standard deviations of the benchmark over the window length 
+  threshold <- -8*sd(rt_daily_ben[(i-win_day):i, ])
+  if (rt_ptf[(i-win_day),] < threshold){
+    print(paste("Breached on", index(rt_ptf[(i-win_day), 0])))
+    print(paste((rt_ptf[(i-win_day),])))
+    print(paste(threshold))
+    break
+  }
+}
+```
+```{r, echo = FALSE}  
+for (i in idx:length(rt_daily_ben)){
+  # Standard deviations of the benchmark over the window length 
+  threshold <- -8*sd(rt_daily_ben[(i-win_day):i, ])
+  if (rt_ptfR3[(i-win_day),] < threshold){
+    print(paste("Breached on", index(rt_ptf[(i-win_day), 0])))
+    print(paste((rt_ptf[(i-win_day),])))
+    print(paste(threshold))
+    break
+  }
+}
+```
+```{r, echo = FALSE}  
+for (i in idx:length(rt_daily_ben)){
+  # Standard deviations of the benchmark over the window length 
+  threshold <- -8*sd(rt_daily_ben[(i-win_day):i, ])
+  if (rt_ptfGMV[(i-win_day),] < threshold){
+    print(paste("Breached on", index(rt_ptf[(i-win_day), 0])))
+    print(paste((rt_ptf[(i-win_day),])))
+    print(paste(threshold))
+    break
+  }
+}
+```
+
+
+```{r PF-Fee, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
+fee_rate <- 0.001
+
+# Portfolio value at the beginning of each rebalancing period
+port_val <- rep(0, rebal_freq+1)
+port_val[1] <- c(10^7)*(1-fee_rate)
+
+# Matrix of portfolio positions in USD
+# at the end of each rebalancing period
+positions <- matrix(0, nrow = rebal_freq, ncol = nvar)
+
+# Accumulated fees
+fees <- 10^7*fee_rate
+
+start_date_loop <- index(rt_daily[1,0])
+for (per in 1:rebal_freq) {
+  # Get time period
+  end_date_loop <- start_date_loop %m+% months(rebal_per)
+  end_date_loop <- end_date_loop - days(lubridate::day(end_date_loop))
+  
+  # Return per rebalancing period
+  x0 <- prices[paste0(start_date_loop, "/", end_date_loop)]
+  rt_per <- as.numeric(x0[nrow(x0),])/as.numeric(x0[1,])
+  
+  # Portfolio value at the end of the rebalancing period
+  positions[per,] <- port_val[per]*port.wts[per,]*rt_per
+  
+  # Perform rebalancing
+  dollar <- sum(positions[per,])
+  if (per != rebal_freq){
+    target <- dollar*port.wts[per+1,]
+  } else {
+    # Liquidate the entire position at the end and return cash to investors
+    target <- rep(0, nvar)
+  } 
+  
+  # Record fees and portfolio value at the beginning of the new period
+  fees <- fees + sum(abs(target - positions[per,]))*fee_rate
+  port_val[per+1] <- dollar - sum(abs(target - positions[per,]))*fee_rate
+  
+  start_date_loop <- end_date_loop + days(1)
+}
+
+options(scipen = 999)
+par(mfrow = c(1,1), mar = c(3,2,2,3), xpd=TRUE)
+bp1 <- barplot(t(positions), col=rainbow(nvar), ylim = c(min(positions), max(positions)), ylab = "Weights", beside = T)
+legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
+
+# Total fees paid
+fees
+
+# Plot portfolio value over time
+bp <- barplot(port_val[2:(rebal_freq+1)], ylim = c(0, max(port_val)*1.1), xlab = 'Quarter', 
+     ylab = 'Dollar Value', main = 'Portfolio Value')
+text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3)
+```
+```{r}
+# Yearly target return of risk profile 2 portfolio 
+(rt_yr_tgt <- colSums(rt_tgt[period, ]))
+```
+```{r}
+if (rt_yr_ptf < rt_yr_tgt[1]){
+  print(paste("Failed to meet yearly target return of risk profile 1 in", year(period)))
+}
+if (rt_yr_ptf < rt_yr_tgt[2]){
+  print(paste("Failed to meet yearly target return of risk profile 2 in", year(period)))
+}
+if (rt_yr_ptf < rt_yr_tgt[3]){
+  print(paste("Failed to meet yearly target return of risk profile 3 in", year(period)))
+}
 ```
