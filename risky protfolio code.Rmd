@@ -42,8 +42,21 @@ library(fredr)
 library(FSA)
 library(fPortfolio)
 
+library(quadprog)  
+library(robust)
+#library(fields)
+
 start_date = "2015-01-01"
 end_date = "2020-12-31"
+```
+
+
+
+
+ticker = c( "NVDA", "TSMC", "005930.KS", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "ADI", "LRCX", "MU", "WMT", "PG", "KO", "COST")
+```{r}
+ticker = c( "NVDA", "TSMC", "005930.KS", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "ADI", "LRCX", "MU", "WMT", "PG", "KO", "COST")
+length(ticker)
 ```
 
 
@@ -57,7 +70,8 @@ fredr_set_key("75711c32cc2177d3a651e1cef5d26d6a")
 CPIAUCSL <- fredr(
   series_id = "CPIAUCSL",
   observation_start = as.Date(start_date),
-  observation_end = as.Date(end_date)
+  observation_end = as.Date(end_date),
+  frequency = "m"
 )
 
 cpi = subset(CPIAUCSL , select = c(value, date))
@@ -66,6 +80,108 @@ ts_cpi = as.xts(cpi)
 chart_Series(ts_cpi , name="CPI")
 ```
 
+inflations
+```{r}
+inflation_rate <- diff(ts_cpi) /lag(ts_cpi, k = -1)
+chart_Series(inflation_rate, name="inflation_rate")
+```
+
+
+target
+```{r}
+performance_target <- inflation_rate + 3
+chart_Series(performance_target, name="performance_target")
+```
+
+
+
+
+```{r}
+
+df_spy = getSymbols("SPY", from = "2014-01-01", to = end_date, auto.assign = FALSE)
+
+spy_prices = as.xts(df_spy$SPY.Close)
+spy_log_prices <- diff(log(spy_prices), lag=1)
+spy_rolling_sd <- na.omit(rollapply(spy_log_prices, 126, function(x) StdDev(x)))
+spy_rolling_sd = window(spy_rolling_sd, start = start_date, end = end_date)
+
+chart_Series(spy_rolling_sd , name="spy_rolling_sd")
+
+```
+
+
+```{r}
+loss_threshold = -8*spy_rolling_sd
+chart_Series(loss_threshold , name="spy_rolling_sd")
+```
+
+
+
+```{r}
+
+asset_weight <- function(symbol, s_date, e_date){
+  # 6 month prior calculation
+  s_date_prior = as.Date(s_date) %m-% months(6)
+  e_date_prior = as.Date(s_date)
+  
+  #get assets
+  df_Assets <- getSymbols(symbol, from = s_date_prior, to = e_date_prior)
+
+  # Storing the prices in one array
+  prices <- purrr::map(symbol, function(x) Ad(get(x)))
+  prices <- purrr::reduce(prices, merge)
+  colnames(prices) <- symbol
+  
+  
+  # Computing daily returns
+  rt_daily <- na.omit(Return.calculate(prices, method = "log"))
+
+  
+  # Covariance and Mean estimates  
+  sampCovRobMCD <- covRob(rt_daily, estim = "mcd", quan = .95, ntrial = 10000)
+  mu <- sampCovRobMCD$center
+  varcov <- sampCovRobMCD$cov
+  
+  # Number of assets
+  nvar <- length(mu)
+  
+  # Number of efficient frontier points
+  n.er <- 100  
+  rset <- seq(min(mu), max(mu), length=n.er+2)
+  rset <- rset[2:n.er+1]
+  
+  # Initialize variables to store results
+  port.ret <- rset
+  port.std <- rset*0
+  port.wgt <- matrix(0, n.er, nvar)
+  
+  # Calculate efficient frontier using quadratic programming
+  for (i in 1:(n.er-1)) {
+  Dmat <- 2*varcov
+  dvec <- rep(0, nvar) 
+  Amat <- t(rbind(t(rep(1, nvar)), t(mu), diag(nvar)))
+  bvec <- c(1, rset[i], rep(0, nvar))
+  
+  # Mean-variance optimization
+  m <- solve.QP(Dmat, dvec, Amat, bvec, meq = 2)
+  
+  # Store results
+  port.std[i]  <- sqrt(m$value)
+  port.wgt[i,] <- t(m$solution)
+  }
+  
+  # Efficient frontier 
+  plot(sqrt(diag(varcov)), mu, xlim=c(0.8*min(port.std),1.6*max(port.std)), 
+     ylim=c(1.2*min(mu), 1.2*max(mu)), col = rainbow(nvar), lwd = 10, 
+     xlab = expression(sigma), ylab = expression(mu))
+  text(sqrt(diag(varcov)), mu, labels = tickers, cex= 1)
+  lines(port.std, port.ret, col = "black", lwd = 1)
+
+}
+
+```
+
+
 Stocks 
 
 Nvidia: "NVDA"
@@ -83,29 +199,18 @@ Analog Devices: "ADI"
 "NVDA", "AAPL", "GOOG", "MSFT", "INTC", "IMB", "SAP", "AMZN", "ORCL", "ADI", "DDD"
 
 
-
-
-Stocks 
-
-Nvidia: "NVDA"
-Apple "AAPL"
-Google: "GOOG"
-Microsoft: "MSFT"
-Intel: "INTC"
-IBM: "IMB"
-SAP: "SAP
-Amazon: "AMZN"
-Oracle: "ORCL"
-Analog Devices: "ADI"
-3D Systems Corporation: "DDD"
-
-"NVDA", "AAPL", "GOOG", "MSFT", "INTC", "IMB", "SAP", "AMZN", "ORCL", "ADI", "DDD"
 
 
 
 Daily Returns
 ```{r}
-tickers = c("NVDA", "AAPL", "GOOG", "MSFT", "INTC", "IMB", "SAP", "AMZN", "ORCL", "ADI", "DDD")
+
+tickers = c( "NVDA", "TSM", "005930.KS", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "ADI", "LRCX", "MU", "WMT", "PG", "KO", "COST")
+asset_weight(tickers, start_date, end_date)
+
+
+```
+
 
 pr_daily <- getSymbols(tickers, src = "yahoo",
            from = start_date,
@@ -115,8 +220,6 @@ pr_daily <- getSymbols(tickers, src = "yahoo",
   reduce(merge)
 
 pr_daily = as.xts(pr_daily)
-head(pr_daily)
-
 ```
 
 Daily Log Returns
@@ -134,30 +237,31 @@ high_exp_return_portfolio <- PortfolioAnalytics::portfolio.spec(assets = tickers
 typeof(high_var_portfolio)
 
 
-# Add the full investment constraint that specifies that the weights must sum to 1
 high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
   portfolio = high_exp_return_portfolio,
   type = "full_investment"
 )
 
-# Add the box constraint that ensure the weights are between 0.1 and 0.6
 high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
   portfolio = high_exp_return_portfolio,
   type = "long_only"
 )
 
-# Add the box constraint that ensure the weights are between 0.1 and 0.6
 high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
   portfolio = high_exp_return_portfolio,
-  type = "transaction_cost", ptc = .01
+  type = "transaction_cost", ptc = .1
 )
 
+#expected valua
+high_exp_return_portfolio <- PortfolioAnalytics::add.constraint(
+  portfolio = high_exp_return_portfolio,
+  type = "transaction_cost", ptc = .1
+)
 
 
 # Add objective to minimize variance
 high_exp_return_portfolio <- PortfolioAnalytics::add.objective(
   portfolio = high_exp_return_portfolio,
-  # Minimize risk
   type = "return",
   name = "mean"
 )
