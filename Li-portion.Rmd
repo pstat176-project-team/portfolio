@@ -321,6 +321,9 @@ sampCovRobMCD
 
 
 ```{r}
+if(FALSE){
+knitr::opts_chunk$set(fig.width=1, fig.height=2) 
+par(mfrow = c(1, 4))
 library(gridExtra)
 # Define start and end dates
 start_date <- as.Date("2014-12-31")
@@ -391,7 +394,7 @@ for (i in seq_len(nquarters)) {
 }
 
 # Arrange plots in a grid
-gridExtra::grid.arrange(grobs = plots)
+gridExtra::grid.arrange(grobs = plots)}
 ```
 
 
@@ -470,27 +473,6 @@ head(rt_tgt)
 colSums(rt_target)
 ```
 
-```{r}
-# Define the start and end years
-start_year <- 2015
-end_year <- 2020
-
-# Empty list to store the yearly target returns
-yearly_target_returns <- list()
-
-# Iterate over each year
-for (year in start_year:end_year) {
-  # Define the period for the current year
-  period <- paste0(year, "-01-01/", year, "-12-31")
-  
-  # Calculate the yearly target returns for each risk profile
-  yearly_target_returns[[as.character(year)]] <- colSums(rt_tgt[period, ])
-  
-  # Access the yearly target returns for the current year
-  rt_yr_tgt <- yearly_target_returns[[as.character(year)]]
-}
-yearly_target_returns
-```
 
 
 ```{r, message = FALSE, echo = FALSE} 
@@ -520,8 +502,6 @@ rebal_per <- int
 diff_in_months <- (year(ymd(end_date))  - year(ymd(start_date))) * 12 +
                   (month(ymd(end_date)) - month(ymd(start_date)))
 rebal_freq <- diff_in_months/rebal_per
-```
-```{r, echo = FALSE}
 # Decrease the start date date by 3 months
 prev_date <- ymd(start_date) %m-% months(rebal_per)
 
@@ -541,16 +521,16 @@ portGMV.wts <- matrix(0, rebal_freq, nvar)
 sampCovRobMCD_init <- covRob(rt_daily_init, estim = "mcd", quan = .95, ntrial = 10000)
 mu_init <- sampCovRobMCD_init$center
 varcov_init <- sampCovRobMCD_init$cov
-
 # Specific target risk
 #if (FALSE) {
   # Pick risk profile 3
-  tgt_pro_3 <- as.numeric(rt_tgt[index(rt_daily[1,]), 3])
+  tgt_pro_3 <- as.numeric(rt_tgt[index(rt_daily[1,]), 2])
 
   # Efficient portfolio with target return for risk profile 3
-  efficient_portfolio <- tseries::portfolio.optim(x = rt_daily_init, pm = tgt_pro_3, 
+  efficient_portfolio <- tseries::portfolio.optim(x = rt_daily_init, 
                             covmat = varcov_init, reshigh = rep(1.2, nvar), 
-                            reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE)
+                            reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE,
+                            target_return = 2*abs(tgt_pro_3))
   portRisk3.wts[1,] <- efficient_portfolio$pw
 #}
 
@@ -569,7 +549,6 @@ varcov_init <- sampCovRobMCD_init$cov
 # Max Sharpe Portfolio with box constraints
 port.wts[1,] <- maxSharpe(m = as.numeric(mu_init), var = matrix(varcov_init, ncol = nvar), 
                           wmin = -0.2, wmax = 1.2)
-
 start_date_loop <- index(rt_daily[1,0])
 for (rper in 2:rebal_freq) {
   end_date_loop <- start_date_loop %m+% months(rebal_per)
@@ -587,13 +566,13 @@ for (rper in 2:rebal_freq) {
   #if (FALSE) {
   # Pick risk profile 3
   # Use a time window of one week to adjust for weekend and other non-trading days 
-  tgt_pro_3 <- mean(as.numeric(rt_tgt[paste0(end_date_loop + days(1), "/", 
-                                             end_date_loop + days(7)), 3]))
-
+  tgt_pro_3 <- max(as.numeric(rt_tgt[paste0(end_date_loop + days(1), "/", 
+                                             end_date_loop + days(7)), 2]))
   # Efficient portfolio with target return = mean of returns
-  efficient_portfolio <- tseries::portfolio.optim(x = window_returns, pm = tgt_pro_3, 
+  efficient_portfolio <- tseries::portfolio.optim(x = window_returns,
                                   covmat = varcov, reshigh = rep(1.2, nvar), 
-                                  reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE)
+                                  reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE,
+                                  target_return = 2*abs(tgt_pro_3))
   portRisk3.wts[rper,] <- efficient_portfolio$pw
   #}
   
@@ -628,6 +607,8 @@ barplot(t(portGMV.wts), col=rainbow(nvar), ylab = "Weights", beside = TRUE)
 legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
 ```
 
+
+
 ```{r, message = FALSE, echo = FALSE} 
 # Manually computing portfolio returns
 rt_ptf <- rt_daily[,1]
@@ -655,9 +636,16 @@ for (i in 1:nrow(rt_daily)){
 
 
 
+
+
+
+
+
 ```{r, echo = FALSE}  
 # Window of benchmark returns
 window <- 6
+start_date = "2014-12-31"
+end_date = "2020-12-31"
 
 benchmark <- "SPY"
 df_Assets <- getSymbols(benchmark, from = ymd(start_date) %m-% months(window), to = end_date)
@@ -765,9 +753,8 @@ fees
 # Plot portfolio value over time
 bp <- barplot(port_val[2:(rebal_freq+1)], ylim = c(0, max(port_val)*1.1), xlab = 'Quarter', 
      ylab = 'Dollar Value', main = 'Portfolio Value')
-text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3)
+text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3, cex = .45)
 ```
-
 ```{r PF-Fee, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 fee_rate <- 0.001
 
@@ -822,8 +809,9 @@ fees
 # Plot portfolio value over time
 bp <- barplot(port_val[2:(rebal_freq+1)], ylim = c(0, max(port_val)*1.1), xlab = 'Quarter', 
      ylab = 'Dollar Value', main = 'Portfolio Value')
-text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3)
+text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3, cex = .45)
 ```
+
 
 ```{r PF-Fee, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 fee_rate <- 0.001
@@ -879,12 +867,13 @@ fees
 # Plot portfolio value over time
 bp <- barplot(port_val[2:(rebal_freq+1)], ylim = c(0, max(port_val)*1.1), xlab = 'Quarter', 
      ylab = 'Dollar Value', main = 'Portfolio Value')
-text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3)
+text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_freq+1)]/10^6,3), pos = 3, cex = .45)
 ```
+
+
 Performance measures:
 ```{r}
 hist(rt_ptf, main = "Histogram of Portfolio Returns", xlab = "Returns", ylab = "Density")
-hist(rt_ptfR3, main = "Histogram of Portfolio Returns", xlab = "Returns", ylab = "Density")
 hist(rt_ptfGMV, main = "Histogram of Portfolio Returns", xlab = "Returns", ylab = "Density")
 ```
 ```{r}
@@ -893,22 +882,16 @@ n <- length(unique_rt)
 cum_prob <- sapply(unique_rt, function(x) sum(unique_rt <= x) / n)
 edf_manual <- data.frame(Returns = unique_rt, CumulativeProbability = cum_prob)
 # par(mfrow = c(1,2), mar = c(3,2,2,3))
-plot(unique_rt, cum_prob, type = "l", main = "Empirical Distribution Function (EDF) of Portfolio Returns",xlab = "Returns", ylab = "EDF")
+plot(unique_rt, cum_prob, type = "l", main = "Empirical Distribution Function (EDF) of MS Portfolio Returns",xlab = "Returns", ylab = "EDF")
 
 
-unique_rt <- sort(unique(rt_ptfR3))
-n <- length(unique_rt)
-cum_prob <- sapply(unique_rt, function(x) sum(unique_rt <= x) / n)
-edf_manual <- data.frame(Returns = unique_rt, CumulativeProbability = cum_prob)
-# par(mfrow = c(1,2), mar = c(3,2,2,3))
-plot(unique_rt, cum_prob, type = "l", main = "Empirical Distribution Function (EDF) of Portfolio Returns",xlab = "Returns", ylab = "EDF")
 
 unique_rt <- sort(unique(rt_ptfGMV))
 n <- length(unique_rt)
 cum_prob <- sapply(unique_rt, function(x) sum(unique_rt <= x) / n)
 edf_manual <- data.frame(Returns = unique_rt, CumulativeProbability = cum_prob)
 # par(mfrow = c(1,2), mar = c(3,2,2,3))
-plot(unique_rt, cum_prob, type = "l", main = "Empirical Distribution Function (EDF) of Portfolio Returns",xlab = "Returns", ylab = "EDF")
+plot(unique_rt, cum_prob, type = "l", main = "Empirical Distribution Function (EDF) of GMV Portfolio Returns",xlab = "Returns", ylab = "EDF")
 ```
 
 ```{R}
@@ -919,12 +902,6 @@ abline(v = quantile(rt_ptf, probs = 0.05), col = "red", lty = "dashed", lwd = 2)
 legend("topright", legend = c("Density", "5% Quantile"), 
        col = c("black", "red"), lty = c("solid", "dashed"), lwd = c(1, 2), cex = 0.8)
 
-# Density plot with 5% quantile line
-plot(density(rt_ptfR3[, 1]), main = "Kernel Density of Low Risk Portfolio Returns", 
-     xlab = "Returns", ylab = "Density")
-abline(v = quantile(rt_ptfR3, probs = 0.05), col = "red", lty = "dashed", lwd = 2)
-legend("topright", legend = c("Density", "5% Quantile"), 
-       col = c("black", "red"), lty = c("solid", "dashed"), lwd = c(1, 2), cex = 0.8)
 
 # Density plot with 5% quantile line
 plot(density(rt_ptfGMV[, 1]), main = "Kernel Density of GMV Portfolio Returns", 
@@ -936,23 +913,123 @@ legend("topright", legend = c("Density", "5% Quantile"),
 
 
 Check target:
+
 ```{r}
-# Yearly return of tangency portfolio
-period <- paste0(as.Date(start_date) + days(1), "/", end_date)
-(rt_yr_ptf <- colSums(rt_ptf[period, ]))
+# Define the start and end years
+start_year <- 2015
+end_year <- 2020
+
+# Empty list to store the yearly target returns
+yearly_target_returns <- list()
+
+# Iterate over each year
+for (year in start_year:end_year) {
+  # Define the period for the current year
+  period <- paste0(year, "-01-01/", year, "-12-31")
+  
+  # Calculate the yearly target returns for each risk profile
+  yearly_target_returns[[as.character(year)]] <- colSums(rt_tgt[period, ])
+  
+  # Access the yearly target returns for the current year
+  rt_yr_tgt <- yearly_target_returns[[as.character(year)]]
+}
+yearly_target_returns
 ```
+
 ```{r}
-# Yearly target return of risk profile 2 portfolio 
-(rt_yr_tgt <- colSums(rt_tgt[period, ]))
+# Define the start and end years
+start_year <- 2015
+end_year <- 2020
+
+Yr_2015Return <- (port_val[5] - port_val[1])/port_val[1]
+Yr_2016Return <- (port_val[9] - port_val[5])/port_val[5]
+Yr_2017Return <- (port_val[13] - port_val[9])/port_val[9]
+Yr_2018Return <- (port_val[17] - port_val[13])/port_val[13]
+Yr_2019Return <- (port_val[21] - port_val[17])/port_val[17]
+Yr_2020Return <- (port_val[25] - port_val[21])/port_val[21]
+Yr_2015Return
+Yr_2016Return
+Yr_2017Return
+Yr_2018Return
+Yr_2019Return
+Yr_2020Return
+((port_val[25] - port_val[1])/port_val[1])
 ```
+
+
 ```{r}
-if (rt_yr_ptf < rt_yr_tgt[1]){
-  print(paste("Failed to meet yearly target return of risk profile 1 in", year(period)))
+daily_MDD <- NULL
+# 20 day time window corresponding to 1 month
+for (i in 1:(nrow(rt_ptf) - 20)) {
+  window_returns <- rt_ptf[i:(i + 19), ]
+  daily_MDD <- c(daily_MDD, maxDrawdown(window_returns))
 }
-if (rt_yr_ptf < rt_yr_tgt[2]){
-  print(paste("Failed to meet yearly target return of risk profile 2 in", year(period)))
+plot(daily_MDD, type = "l", main = "Maximum Draw-Down over the last 20 days, MS", ylab = "MDD")
+
+daily_MDD <- NULL
+# 20 day time window corresponding to 1 month
+for (i in 1:(nrow(rt_ptfGMV) - 20)) {
+  window_returns <- rt_ptfGMV[i:(i + 19), ]
+  daily_MDD <- c(daily_MDD, maxDrawdown(window_returns))
 }
-if (rt_yr_ptf < rt_yr_tgt[3]){
-  print(paste("Failed to meet yearly target return of risk profile 3 in", year(period)))
+plot(daily_MDD, type = "l", main = "Maximum Draw-Down over the last 20 days, GMV", ylab = "MDD")
+```
+
+
+```{r}
+daily_Omega <- NULL
+# 20 day time window corresponding to 1 month
+for (i in 1:(nrow(rt_ptf) - 20)) {
+  window_returns <- rt_ptf[i:(i + 19), ]
+  daily_Omega <- c(daily_Omega, Omega(window_returns, method="interp", output="point"))
 }
+plot(daily_Omega, type = "l", main = "Omega Ratio over the last 20 days MS", ylab = "Omega")
+
+daily_Omega <- NULL
+# 20 day time window corresponding to 1 month
+for (i in 1:(nrow(rt_ptfGMV) - 20)) {
+  window_returns <- rt_ptfGMV[i:(i + 19), ]
+  daily_Omega <- c(daily_Omega, Omega(window_returns, method="interp", output="point"))
+}
+plot(daily_Omega, type = "l", main = "Omega Ratio over the last 20 days GMV", ylab = "Omega")
+
+```
+
+```{r}
+DivD <- NULL
+for (i in 1:(nrow(rt_ptf) - 20)) {
+  window_ptf <- rt_ptf[i:(i + 19), ]
+  window_assets <- rt_daily[i:(i + 19), ]
+  var_ptf <- var(window_ptf)
+  var_assets <- diag(var(window_assets))
+  entropy_ptf <- (1/2)*log(2*pi*var_ptf) + (1/2)
+  entropy_assets <- (1/2)*log(2*pi*var_assets) + (1/2)
+  k <- ceiling(month(index(rt_daily[i,0]))/ rebal_per)
+  entropy_ats <- sum(port.wts[k,]*entropy_assets)
+  DivD <- c(DivD, 1-exp(entropy_ptf - entropy_ats))
+}
+plot(DivD, type = "l", main = "Portfolio Diversification Delta over the last 20 days, MS", ylab = "Diversification Delta")
+
+DivD <- NULL
+for (i in 1:(nrow(rt_ptfR3) - 20)) {
+  window_ptf <- rt_ptfR3[i:(i + 19), ]
+  window_assets <- rt_daily[i:(i + 19), ]
+  var_ptf <- var(window_ptf)
+  var_assets <- diag(var(window_assets))
+  entropy_ptf <- (1/2)*log(2*pi*var_ptf) + (1/2)
+  entropy_assets <- (1/2)*log(2*pi*var_assets) + (1/2)
+  k <- ceiling(month(index(rt_daily[i,0]))/ rebal_per)
+  entropy_ats <- sum(port.wts[k,]*entropy_assets)
+  DivD <- c(DivD, 1-exp(entropy_ptf - entropy_ats))
+}
+plot(DivD, type = "l", main = "Portfolio Diversification Delta over the last 20 days, GMV", ylab = "Diversification Delta")
+```
+
+
+```{r}
+qqnorm(rt_ptf)
+qqline(rt_ptf)
+
+qqnorm(rt_ptfR3)
+qqline(rt_ptfR3)
 ```
