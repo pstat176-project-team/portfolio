@@ -144,7 +144,7 @@ We will further consider the cost of fertilizer through CF Industries Holdings, 
 
 ```{R, echo = FALSE, include = FALSE}
 #Step 7: read daily CLOSE prices for all assets
-tickers = c("BIV", "BSV", "VOO", "GLD", "BRK-B", "CDNS", "GE", "GOOG", "GIS", "WMT", "CF", "V", "JPM", "AMZN", "MSFT", "JNJ", "PG")
+tickers = c("BIV", "BSV", "VOO", "GLD", "BRK-B", "CDNS", "GE", "GOOG", "GIS", "WMT", "CF", "V", "JPM", "AMZN", "JNJ")
 ```
 ```{r, echo = FALSE, include = FALSE}
 # Expense Ratios:
@@ -935,6 +935,9 @@ for (year in start_year:end_year) {
 }
 yearly_target_returns
 ```
+```{r}
+colSums(rt_tgt)
+```
 
 ```{r}
 # Define the start and end years
@@ -942,11 +945,11 @@ start_year <- 2015
 end_year <- 2020
 
 Yr_2015Return <- (port_val[5] - port_val[1])/port_val[1]
-Yr_2016Return <- (port_val[9] - port_val[5])/port_val[5]
-Yr_2017Return <- (port_val[13] - port_val[9])/port_val[9]
-Yr_2018Return <- (port_val[17] - port_val[13])/port_val[13]
-Yr_2019Return <- (port_val[21] - port_val[17])/port_val[17]
-Yr_2020Return <- (port_val[25] - port_val[21])/port_val[21]
+Yr_2016Return <- ((port_val[9] - port_val[5])/port_val[5])
+Yr_2017Return <- ((port_val[13] - port_val[1])/port_val[1])
+Yr_2018Return <- ((port_val[17] - port_val[1])/port_val[1])
+Yr_2019Return <- ((port_val[21] - port_val[1])/port_val[1])
+Yr_2020Return <- ((port_val[25] - port_val[1])/port_val[1])
 Yr_2015Return
 Yr_2016Return
 Yr_2017Return
@@ -1023,6 +1026,41 @@ for (i in 1:(nrow(rt_ptfR3) - 20)) {
   DivD <- c(DivD, 1-exp(entropy_ptf - entropy_ats))
 }
 plot(DivD, type = "l", main = "Portfolio Diversification Delta over the last 20 days, GMV", ylab = "Diversification Delta")
+```
+
+```{r}
+library(quantmod)
+
+# Define the start and end dates
+start_date <- as.Date("2015-01-01")
+end_date <- as.Date("2020-12-31")
+
+# Fetch SPY data from Yahoo Finance
+getSymbols("SPY", from = start_date, to = end_date)
+
+# Calculate quarterly returns
+returns <- ROC(Cl(to.quarterly(SPY)))
+
+# Plot the quarterly returns
+plot(returns, type = "l", col = "blue", main = "SPY Quarterly Returns",
+     xlab = "Date", ylab = "Returns")
+
+
+library(quantmod)
+
+# Define the start and end dates
+start_date <- as.Date("2015-01-01")
+end_date <- as.Date("2020-12-31")
+
+# Fetch SPY data from Yahoo Finance
+getSymbols("ULST", from = start_date, to = end_date)
+
+# Calculate quarterly returns
+returns <- ROC(Cl(to.quarterly(ULST)))
+
+# Plot the quarterly returns
+plot(returns, type = "l", col = "blue", main = "ULST Quarterly Returns",
+     xlab = "Date", ylab = "Returns")
 ```
 
 
