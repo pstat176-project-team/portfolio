@@ -44,10 +44,7 @@ rebal_per <- 4
 
 ```
 
-AMZN
-MKC
-amd
-ORLY
+AMZN MKC amd ORLY
 
 ## Target Returns
 
@@ -134,28 +131,44 @@ for (per in 1:rebal_freq) {
 head(rt_tgt)
 ```
 
-## Portfolio 
+## Portfolio
 
 ```{r 1, echo = TRUE, message = FALSE, warning = FALSE}
-tickers = c( "NVDA", "TSM", "MCHP", "AVGO", "ASML", "AMD", "QCOM", "ADI", "LRCX", "ATVI", "MKC", "ORLY", "COST", "AMZN", "NFLX")
+#tickers = c( "NVDA", "TSM", "MCHP", "AVGO", "ASML", "AMD", "QCOM", "ADI", "LRCX", "ATVI", "MKC", "ORLY", "COST", "AMZN", "NFLX")
 
-#tickers = c( "NVDA", "TSM", "MCHP", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "ADI", "LRCX", "MU", "WMT", "PG", "MKC", "ORLY", "COST", "AMZN", "BRK-A", "GS", "AAPL", "V")
+#tickers = c( "NVDA", "TSM", "MCHP", "AVGO", "ASML", "AMD", "AMAT", "ADI", "LRCX", "MU", "WMT", "PG", "MKC", "ORLY", "COST", "AMZN", "BRK-A", "GS", "AAPL", "V")
 
+#tickers = c( "NVDA", "PLAB" ,"SLAB", "CRUS", "AMD", "SIMO", "AVGO", "FORM", "SWBI", "LRCX", "MKC", "ORLY", "COST", "AMZN", "BRK-A", "NFLX", "GOOGL")
 
+#SLAB", "AVGO", "COST", "AMZN", "NFLX"
 #AMZN, MKC, amd, ORLY, TSLA
-```
 
+
+
+tickers_2015 = c( "NVDA", "SIMO", "AVGO", "MCHP", "AMD", "COST","NFLX", "AMZN", "BRK-A", "DPZ")
+
+tickers_2016 = c("NVDA", "AMAT", "CRUS", "AMD", "MCHP", "COST" , "BRK-A" , "AMZN", "MU", "DPZ")
+
+tickers_2017 = c("LRCX", "ASML", "STM", "MRVL","MCHP", "NVDA", "AMZN", "MSFT", "V", "DPZ")
+
+tickers_2018 = c("SMTC", "AMD", "WOLF", "VECO","MCHP", "AMZN", "MKC", "ORLY", "MSFT", "DPZ")
+
+tickers_2019 = c("AMAT", "AMD", "KLAC", "ASML","MCHP", "LRCX", "TSM", "AMZN", "COST", "DPZ")
+
+tickers_2020 = c("NVDA", "NFLX", "AMZN", "AVGO","MCHP", "AMD", "TSM", "MSFT", "COST", "DPZ")
+
+```
 
 ```{r 2, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 # Obtaining stock data
 start_date <- "2014-9-30"
 end_date <- "2020-12-31"
-df_Assets <- getSymbols(tickers, from = start_date, to = end_date)
+df_Assets <- getSymbols(tickers_2015, from = start_date, to = end_date)
 
 # Storing the prices in one array
-prices <- purrr::map(tickers, function(x) Ad(get(x)))
+prices <- purrr::map(tickers_2015, function(x) Ad(get(x)))
 prices <- purrr::reduce(prices, merge)
-colnames(prices) <- tickers
+colnames(prices) <- tickers_2015
 
 # Computing daily returns
 rt_daily <- na.omit(Return.calculate(prices, method = "log"))
@@ -164,6 +177,9 @@ rt_daily <- na.omit(Return.calculate(prices, method = "log"))
 
 # Portfolio Rebalancing with robust variance-covariance matrix
 
+```{r}
+View(rt_daily)
+```
 
 ```{r}
 max_sharp_data <- function(sampCovRobMCD, mu, varcov, s_date, e_date, max_sharp_weights){
@@ -185,7 +201,7 @@ max_sharp_data <- function(sampCovRobMCD, mu, varcov, s_date, e_date, max_sharp_
 
 ```{r}
 
-efficent_plot <- function(sampCovRobMCD, mu, varcov, s_date, e_date){
+efficent_plot <- function(sampCovRobMCD, mu, varcov, s_date, e_date, this_tickers){
 
   # Number of assets
   ep_nvar <- length(mu)
@@ -219,19 +235,44 @@ efficent_plot <- function(sampCovRobMCD, mu, varcov, s_date, e_date){
   plot(sqrt(diag(varcov)), mu, xlim=c(0.8*min(ep_port.std),1.6*max(ep_port.std)), 
      ylim=c(1.2*min(mu), 1.2*max(mu)), col = rainbow(ep_nvar), lwd = 10, 
      xlab = expression(sigma), ylab = expression(mu), main = paste0("EF Plot : ", s_date, " to ", e_date) )
-  text(sqrt(diag(varcov)), mu, labels = tickers, cex= 1)
+  text(sqrt(diag(varcov)), mu, labels = this_tickers, cex= 1)
   lines(ep_port.std, ep_port.ret, col = "black", lwd = 1)
 }
 
 
+
+
 ```
 
+```{r}
+
+get_daily_returns <- function(tickers){
+  
+  start_date <- "2014-1-1"
+  end_date <- "2020-12-31"
+  df_Assets <- getSymbols(tickers, from = start_date, to = end_date)
+  
+  # Storing the prices in one array
+  prices <- purrr::map(tickers, function(x) Ad(get(x)))
+  prices <- purrr::reduce(prices, merge)
+  colnames(prices) <- tickers
+  
+  # Computing daily returns
+  thisrt_daily <- na.omit(Return.calculate(prices, method = "log"))
+  return (thisrt_daily)
+}
+```
 
 ```{r}
+
+rt_daily <- window(rt_daily, start = "2015-01-02")
 set.seed(1)
 
+start_date <- "2014-12-31"
+end_date <- "2020-12-31"
+
 # Number of assets
-nvar <- length(tickers)
+nvar <- length(tickers_2015)
 
 # Rebalancing period in months
 rebal_per <- 3
@@ -239,14 +280,13 @@ diff_in_months <- (year(ymd(end_date))  - year(ymd(start_date))) * 12 +
                   (month(ymd(end_date)) - month(ymd(start_date)))
 rebal_freq <- diff_in_months/rebal_per
 
-# Decrease the start date date by 3 months
-prev_date <- ymd(start_date) %m-% months(rebal_per)
+prev_date <- ymd(start_date) %m-% months(6)
 
 # Obtaining stock data for the first portfolio weights
-df_Assets_init <- getSymbols(tickers, from = prev_date, to = start_date)
-prices_init <- purrr::map(tickers, function(x) Ad(get(x)))
+df_Assets_init <- getSymbols(tickers_2015, from = prev_date, to = start_date)
+prices_init <- purrr::map(tickers_2015, function(x) Ad(get(x)))
 prices_init <- purrr::reduce(prices_init, merge)
-colnames(prices_init) <- tickers
+colnames(prices_init) <- tickers_2015
 rt_daily_init <- na.omit(Return.calculate(prices_init, method = "log"))
 
 # Initializing portfolio weights
@@ -258,10 +298,10 @@ mu_init <- sampCovRobMCD_init$center
 varcov_init <- sampCovRobMCD_init$cov
 
 # Pick risk profile 1
-tgt_pro_1 <- as.numeric(rt_tgt[index(rt_daily[1,]), 1])
+tgt_pro_1 <- as.numeric(rt_tgt[index(rt_daily[1,]), 3])
 
 # Efficient portfolio with target return for risk profile 1
-efficient_portfolio <- tseries::portfolio.optim(x = rt_daily_init, pm = tgt_pro_1, 
+efficient_portfolio <- tseries::portfolio.optim(x = rt_daily_init, pm = tgt_pro_1+.0015, 
                           covmat = varcov_init, reshigh = rep(1.2, nvar), 
                           reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE)
 port.wts[1,] <- efficient_portfolio$pw
@@ -270,23 +310,53 @@ port.wts[1,] <- efficient_portfolio$pw
 start_date_loop <- index(rt_daily[1,0])
 for (rper in 2:rebal_freq) {
   end_date_loop <- start_date_loop %m+% months(rebal_per)
-  
   # Correct for day differences
   end_date_loop <- end_date_loop - days(lubridate::day(end_date_loop))
-  window_returns <- rt_daily[paste0(start_date_loop, "/", end_date_loop)]
+  
+  s_date_prior = as.Date(end_date_loop) %m-% months(6)
+  e_date_prior = as.Date(end_date_loop)
+  
+  
+  if(year(e_date_prior) == 2015){
+    tickers = tickers_2015
+  } 
+  if(year(e_date_prior) == 2016){
+    tickers = tickers_2016
+  } 
+  if(year(e_date_prior) == 2017){
+    tickers = tickers_2017
+  } 
+  if(year(e_date_prior) == 2018){
+    tickers = tickers_2018
+  } 
+  if(year(e_date_prior) == 2019){
+    tickers = tickers_2019
+  } 
+  if(year(e_date_prior) == 2020){
+    tickers = tickers_2020
+  } 
+  
+  rt_daily_live = get_daily_returns(tickers)
+  
+  window_returns <- rt_daily_live[paste0(s_date_prior, "/", e_date_prior)]
   
   # Computing the robust variance-covariance matrix
   sampCovRobMCD <- covRob(window_returns, estim = "mcd", quan = .95, ntrial = 10000)
   mu <- sampCovRobMCD$center
   varcov <- sampCovRobMCD$cov
   
+  print(s_date_prior)
+  print(e_date_prior)
+  View(window_returns)
+  View(varcov)
+  
   tgt_pro_1 <- mean(as.numeric(rt_tgt[paste0(end_date_loop + days(1), "/", 
                                              end_date_loop + days(7)), 1]))
-
-  # Efficient portfolio with target return = mean of returns
-  efficient_portfolio <- tseries::portfolio.optim(x = window_returns, pm = tgt_pro_1, 
+    # Efficient portfolio with target return = mean of returns
+  efficient_portfolio <- tseries::portfolio.optim(x = window_returns, pm = (tgt_pro_1+.005), 
                                   covmat = varcov, reshigh = rep(1.2, nvar), 
                                   reslow = rep(-0.2, nvar), riskless = FALSE, shorts=TRUE)
+  
   port.wts[rper,] <- efficient_portfolio$pw
   
   
@@ -298,14 +368,28 @@ barplot(t(port.wts), col=rainbow(nvar), ylab = "Weights", beside = TRUE)
 legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
 ```
 
+```{r}
 
+```
 
+```{r}
+rt_daily <- window(rt_daily, start = "2015-01-02")
+df_rt_daily = data.frame(rt_daily) 
+df_rt_daily$Date = as.Date(rownames(df_rt_daily))
+rownames(df_rt_daily)<-NULL
+df_daily_port_weight <- data.frame(matrix(ncol = 12, nrow = nrow(rt_daily) ) )
+colnames(df_daily_port_weight) <- c("Date", "Ticker", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10")
+df_daily_port_weight$Date = as.Date(df_rt_daily$Date)
+df_daily_port_weight[is.na(df_daily_port_weight)] <- 0
+df_daily_port_weight
+View(df_daily_port_weight)
 
-
-
-
+```
 
 ```{r PF-Rebal-1, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
+
+tickers = tickers_2015
+rt_daily <- window(rt_daily, start = "2015-01-02")
 set.seed(1)
 
 start_date <- "2014-12-31"
@@ -320,8 +404,7 @@ diff_in_months <- (year(ymd(end_date))  - year(ymd(start_date))) * 12 +
                   (month(ymd(end_date)) - month(ymd(start_date)))
 rebal_freq <- diff_in_months/rebal_per
 
-# Decrease the start date date by 3 months
-prev_date <- ymd(start_date) %m-% months(rebal_per)
+prev_date <- ymd(start_date) %m-% months(6)
 
 # Obtaining stock data for the first portfolio weights
 df_Assets_init <- getSymbols(tickers, from = prev_date, to = start_date)
@@ -349,24 +432,77 @@ if (sum_pos > 1.2){
   sum_neg <- sum(port.wts[1,][port.wts[1,] < 0])
   port.wts[1,][port.wts[1,] < 0] <- port.wts[1,][port.wts[1,] < 0]*0.2/(-sum_neg)
 }
+start = "2015-01-02"
+
+
+s_date_current = as.Date("2015-01-02")
+e_date_current = s_date_current %m+% months(rebal_per)
+
+df_daily_port_weight[df_daily_port_weight$Date >= s_date_current & df_daily_port_weight$Date <= e_date_current, "Ticker"] <- "tickers_2015"
+
+
+for (stock_idx in 1:10){
+  df_daily_port_weight[df_daily_port_weight$Date >= s_date_current & df_daily_port_weight$Date <= e_date_current, toString(stock_idx)] <- port.wts[1,stock_idx]
+}
+
+
+efficent_plot(sampCovRobMCD, mu, varcov, s_date_prior, e_date_prior, tickers)
 
 
 start_date_loop <- index(rt_daily[1,0])
+
 for (rper in 2:rebal_freq) {
   end_date_loop <- start_date_loop %m+% months(rebal_per)
   
   # Correct for day differences
   end_date_loop <- end_date_loop - days(lubridate::day(end_date_loop))
-  window_returns <- rt_daily[paste0(start_date_loop, "/", end_date_loop)]
+  
+  s_date_prior = as.Date(end_date_loop) %m-% months(6)
+  e_date_prior = as.Date(end_date_loop)
+  
+  
+  if(year(e_date_prior) == 2015){
+    tickers = tickers_2015
+    tickers_string = "tickers_2015"
+  } 
+  if(year(e_date_prior) == 2016){
+    tickers = tickers_2016
+    tickers_string = "tickers_2016"
+  } 
+  if(year(e_date_prior) == 2017){
+    tickers = tickers_2017
+    tickers_string = "tickers_2017"
+  } 
+  if(year(e_date_prior) == 2018){
+    tickers = tickers_2018
+    tickers_string = "tickers_2018"
+  } 
+  if(year(e_date_prior) == 2019){
+    tickers = tickers_2019
+    tickers_string = "tickers_2019"
+  } 
+  if(year(e_date_prior) == 2020){
+    tickers = tickers_2020
+    tickers_string = "tickers_2020"
+  } 
+  
+  rt_daily_live = get_daily_returns(tickers)
+  
+  window_returns <- rt_daily_live[paste0(s_date_prior, "/", e_date_prior)]
   
   # Computing the robust variance-covariance matrix
-  sampCovRobMCD <- covRob(rt_daily, estim = "mcd", quan = .95, ntrial = 10000)
+  sampCovRobMCD <- covRob(window_returns, estim = "mcd", quan = .95, ntrial = 10000)
   mu <- sampCovRobMCD$center
   varcov <- sampCovRobMCD$cov
- 
+  
+  #print(s_date_prior)
+  #print(e_date_prior)
+  #View(window_returns)
+  #View(varcov)
+  
   # Max Sharpe Portfolio with box constraints
   port.wts[rper,] <- maxSharpe(m = as.numeric(mu), var = matrix(varcov, ncol = nvar), 
-                          wmin =0 , wmax = 1.2)
+                          wmin = -.2 , wmax = 1.2)
 
   sum_pos <- sum(port.wts[rper,][port.wts[rper,] >= 0])
   if (sum_pos > 1.2){
@@ -375,7 +511,22 @@ for (rper in 2:rebal_freq) {
     port.wts[rper,][port.wts[rper,] < 0] <- port.wts[rper,][port.wts[rper,] < 0]*0.2/(-sum_neg)
   }
   
-  efficent_plot(sampCovRobMCD, mu, varcov, start_date_loop, end_date_loop)
+  
+  
+  
+  s_date_current = e_date_prior + days(1)
+  e_date_current = s_date_current %m+% months(rebal_per)
+  
+  df_daily_port_weight[df_daily_port_weight$Date >= s_date_current & df_daily_port_weight$Date <= e_date_current, "Ticker"] <- tickers_string
+  
+  
+  for (stock_idx in 1:10){
+    df_daily_port_weight[df_daily_port_weight$Date >= s_date_current & df_daily_port_weight$Date <= e_date_current, toString(stock_idx)] <- port.wts[rper,stock_idx]
+    
+  }
+
+  
+  efficent_plot(sampCovRobMCD, mu, varcov, s_date_prior, e_date_prior, tickers)
   
   start_date_loop <- end_date_loop + days(1)
 }
@@ -383,18 +534,90 @@ par(mfrow = c(1,1), mar = c(3,2,2,3), xpd=TRUE)
 barplot(t(port.wts), col=rainbow(nvar), ylab = "Weights", beside = TRUE)
 legend("topright", legend = tickers, fill = rainbow(nvar), ncol = 1, inset=c(-0.1,0), cex = 0.8)
 
+#View(df_daily_port_weight)
+
 ```
 
 ## Portfolio Returns
 
+```{r}
+View(df_daily_port_weight)
+df_rt_ptf_daily <- data.frame(matrix(ncol = 2, nrow = nrow(rt_daily) ) )
+colnames(df_rt_ptf_daily) <- c("Portfolio_Returns", "Date")
+df_rt_ptf_daily$Date = as.Date(df_rt_daily$Date)
+df_rt_ptf_daily
+```
+
+```{r}
+prev_ticker = "tickers_2015"
+tickers = tickers_2015
+rt_daily_live = get_daily_returns(tickers)
+
+print(df_daily_port_weight[1, ])
+
+for (day in 1:nrow(df_rt_ptf_daily)){
+  
+   
+  curr_weight = df_daily_port_weight[day, ]
+  curr_date = curr_weight$Date
+  if(curr_weight$Ticker == "tickers_2015"){
+    tickers = tickers_2015
+  } 
+  if(curr_weight$Ticker == "tickers_2016"){
+    tickers = tickers_2016
+  } 
+  if(curr_weight$Ticker == "tickers_2017"){
+    tickers = tickers_2017
+  } 
+  if(curr_weight$Ticker == "tickers_2018"){
+    tickers = tickers_2018
+  } 
+  if(curr_weight$Ticker == "tickers_2019"){
+    tickers = tickers_2019
+  } 
+  if(curr_weight$Ticker == "tickers_2020"){
+    tickers = tickers_2020
+  } 
+  
+  if(prev_ticker != curr_weight$Ticker){
+    prev_ticker = curr_weight$Ticker
+    rt_daily_live = get_daily_returns(tickers)
+  }
+
+  running_total = 0
+  
+  weights = curr_weight[,3:12]
+  for (stock_idx in 1:10){
+    
+    running_total = running_total + (weights[, stock_idx] * rt_daily_live[curr_date, stock_idx])
+  
+  }
+
+  df_rt_ptf_daily$Portfolio_Returns[day] = running_total
+}
+
+df_rt_ptf_daily
+```
+
+```{r}
+View(df_rt_ptf_daily)
+```
+
 ```{r PF-Ret, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 # Manually computing portfolio returns
 rt_ptf <- rt_daily[,1]
+View(rt_daily)
+
+
+
+
+
 colnames(rt_ptf) <- "portfolio.return"
 for (i in 1:nrow(rt_daily)){
   k <- ceiling(month(index(rt_daily[i,0]))/ rebal_per)
   rt_ptf[i,] <- sum(port.wts[k,]*rt_daily[i,])
 }
+
 ```
 
 ## Client Request
@@ -417,8 +640,11 @@ rt_daily_ben <- na.omit(Return.calculate(price_ben, method = "log"))
 idx <- which(index(rt_daily_ben[,0]) == index(rt_ptf[1,0]))
 win_day <- length(rt_daily_ben)-length(rt_ptf)
 
+print(win_day)
+
 for (i in idx:length(rt_daily_ben)){
   # Standard deviations of the benchmark over the window length 
+  
   threshold <- -8*sd(rt_daily_ben[(i-win_day):i, ])
   if (rt_ptf[(i-win_day),] < threshold){
     print(paste("Breached on", index(rt_ptf[(i-win_day), 0])))
@@ -489,9 +715,20 @@ text(bp, round(port_val[2:(rebal_freq+1)], 3), labels = round(port_val[2:(rebal_
 
 ## Check Target Return
 
+```{r}
+df_rt_ptf_daily$Year <- format(df_rt_ptf_daily$Date, "%Y")
+df_rt_ptf_daily
+sum_returns <- aggregate(Portfolio_Returns ~ Year, data = df_rt_ptf_daily, FUN = sum)
+# Print the resulting dataframe
+df_rt_ptf_daily
+print(sum_returns)
+View(sum_returns)
+```
+
 ```{r PF-Target-Check, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 # Yearly return of tangency portfolio
 period <- paste0(as.Date(start_date) + days(1), "/", end_date)
+
 (rt_yr_ptf <- colSums(rt_ptf[period, ]))
 # Yearly target return of risk profile 2 portfolio 
 (rt_yr_tgt <- colSums(rt_tgt[period, ]))
@@ -499,59 +736,18 @@ period <- paste0(as.Date(start_date) + days(1), "/", end_date)
 if (rt_yr_ptf < rt_yr_tgt[1]){
   print(paste("Failed to meet yearly target return of risk profile 1 in", year(period)))
 }
+
 if (rt_yr_ptf < rt_yr_tgt[2]){
   print(paste("Failed to meet yearly target return of risk profile 2 in", year(period)))
 }
+
 if (rt_yr_ptf < rt_yr_tgt[3]){
   print(paste("Failed to meet yearly target return of risk profile 3 in", year(period)))
 }
+
+
+print(rt_yr_tgt)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ```{r PF-Rebal-1, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 set.seed(1)
@@ -749,9 +945,8 @@ if (rt_yr_ptf < rt_yr_tgt[3]){
 }
 ```
 
-
 ## Useful Links
 
-https://rdrr.io/github/NMOF/Ndf_covoMOF/
+<https://rdrr.io/github/NMOF/Ndf_covoMOF/>
 
-https://rdrr.io/github/NMOF/NMOF/man/maxSharpe.html
+<https://rdrr.io/github/NMOF/NMOF/man/maxSharpe.html>
