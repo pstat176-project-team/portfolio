@@ -140,13 +140,11 @@ Tolerable_stdDev
 First, we will note our asset selection for our low-risk portfolio. We will not apply asset rotations since this portfolio is not trying to chase yield. The two key components of a low risk portfolio that beats out CPI, or inflation, is considered to be bond heavy. Since Vanguards "BIV" ETF has the lowest fee (up to this year) through a little known patent, I chose it. Note this is an investment into medium term bonds only, so to deal with that risk we will consider short term bonds through the "BSV", or Vanguard's short term bond index as well. We will additionally consider Berkshire Hathaway as an investment, as it provides a diversified set of companies in the case the fixed income market declines, as typically when bonds go down equities go up, as well as the S&P 500 through "VOO" since "VOO" has a lower fee than SPY. Note the previous statement has not been true as of 2022, since there has been a historic change in the valuation of the dollar. 
 Lastly, we will increase our asset allocation in key areas of gold, technology, and general consumer appliances. This can be done through "GLD", the SPDR gold ETF, for precious metals allocation. We will also consider Cadence("CDNS") for EDA and General Electric ("GE") for legacy technologies, as well as Google ("GOOD") for cloud computing & utility. We will further consider General Mills ("GIS") and Walmart ("WMT") because people like food and low cost goods, and there two are major brands in that area.  
 We will further consider the cost of fertilizer through CF Industries Holdings, since the price of fertilizer is a major factor in the price of food ("CF").
-
+#"COST","NFLX", "AMZN", "BRK-A", "DPZ", "ORLY"
 
 ```{R, echo = FALSE, include = FALSE}
 #Step 7: read daily CLOSE prices for all assets
-tickers = c("NVDA", "SIMO", "AVGO", "MCHP", "AMD", "SMTC", "WOLF", "VECO", "AMAT", "KLAC", "ASML”)
-
-#"COST","NFLX", "AMZN", "BRK-A", "DPZ", "ORLY"
+tickers = c("NVDA", "SIMO", "AVGO", "MCHP", "AMD", "SMTC", "WOLF", "VECO", "AMAT", "KLAC", "ASML","COST", "NFLX", "AMZN", "BRK-B", "DPZ", "ORLY" )
 ```
 ```{r, echo = FALSE, include = FALSE}
 # Expense Ratios:
