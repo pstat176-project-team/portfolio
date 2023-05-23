@@ -157,6 +157,7 @@ tickers_2019 = c("AMAT", "AMD", "KLAC", "ASML","MCHP", "LRCX", "TSM", "AMZN", "C
 
 tickers_2020 = c("NVDA", "NFLX", "AMZN", "AVGO","MCHP", "AMD", "TSM", "MSFT", "COST", "DPZ")
 
+
 ```
 
 ```{r 2, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
@@ -655,6 +656,119 @@ for (i in idx:length(rt_daily_ben)){
 ```
 
 ## Fees and Portfolio Value
+
+```{r}
+
+dates_change_pos = c(as.Date("2015-01-02"))
+#df_dates_change_pos = data.frame()
+for (day in 1:(nrow(df_rt_ptf_daily)-1) ){
+
+  curr_weight = df_daily_port_weight[day, ]
+  next_weight = df_daily_port_weight[day+1, ]
+  
+  
+  weight_today = curr_weight[,3:12]
+  weight_tommrow = next_weight[,3:12]
+  
+  for(stock_idx in 1:10){
+    if(weight_today[stock_idx] != weight_tommrow[stock_idx]){
+      dates_change_pos <- append(dates_change_pos, next_weight$Date)
+      break
+    }
+      
+  }
+}
+
+dates_change_post
+
+
+
+```
+
+```{r}
+get_daily_returns_days <- function(ticker, start_date, end_date){
+  
+  if(ticker == "tickers_2015"){
+    tickers = tickers_2015
+  } 
+  if(ticker == "tickers_2016"){
+    tickers = tickers_2016
+  } 
+  if(ticker == "tickers_2017"){
+    tickers = tickers_2017
+  } 
+  if(ticker == "tickers_2018"){
+    tickers = tickers_2018
+  } 
+  if(ticker == "tickers_2019"){
+    tickers = tickers_2019
+  } 
+  if(ticker == "tickers_2020"){
+    tickers = tickers_2020
+  } 
+  
+  df_Assets <- getSymbols(tickers, from = start_date, to = end_date)
+  
+  # Storing the prices in one array
+  prices <- purrr::map(tickers, function(x) Ad(get(x)))
+  prices <- purrr::reduce(prices, merge)
+  colnames(prices) <- tickers
+  
+  return (prices)
+}
+```
+
+```{r}
+
+fee_rate <- 0.001
+
+
+total_fee = 0.001*10000000
+
+for (day in 1:(length(dates_change_pos)-1 )){
+
+  curr_day = dates_change_pos[day]
+  next_day = dates_change_pos[day+1]
+  curr_weight = df_daily_port_weight[df_daily_port_weight$Date == curr_day,]
+  next_weight = df_daily_port_weight[df_daily_port_weight$Date == next_day,]
+  
+  weight_today = curr_weight[,3:12]
+  weight_tommrow = next_weight[,3:12]
+  
+  if(curr_weight$Ticker == next_weight$Ticker){
+    prices = get_daily_returns_days(curr_weight$Ticker, next_day,  next_day + days(1))
+    prices = data.frame(prices)
+    for(stock_idx in 1:10){
+      total_fee = total_fee + abs(weight_today[stock_idx] - weight_tommrow[stock_idx]) * prices[, stock_idx]*fee_rate
+    }
+    
+    
+  } else {
+    
+
+    curr_prices = get_daily_returns_days(curr_weight$Ticker, next_day,  next_day + days(1))
+    curr_prices = data.frame(prices)
+    
+    next_prices = get_daily_returns_days(next_weight$Ticker, next_day,  next_day + days(1))
+    next_prices = data.frame(prices)
+    
+      for(stock_idx in 1:10){
+        total_fee = total_fee + abs(weight_today[stock_idx]) * curr_prices[,stock_idx]*fee_rate
+        total_fee = total_fee + abs(weight_tommrow[stock_idx]) * next_prices[,stock_idx]*fee_rate
+        
+      }
+    
+    }
+  
+  }
+total_fee
+
+```
+
+```{r}
+View(total_fee)
+
+```
 
 ```{r PF-Fee, eval = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
 fee_rate <- 0.001
