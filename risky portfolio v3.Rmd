@@ -722,11 +722,17 @@ get_daily_returns_days <- function(ticker, start_date, end_date){
 
 fee_rate <- 0.001
 
-
 total_fee = 0.001*10000000
+
+port_val <- rep(0, 25)
+port_val[1] = 10000000*(1-fee_rate)
+curr_port_idx = 1
+
+positions[per,] <- port_val[per]*port.wts[per,]*rt_per
 
 for (day in 1:(length(dates_change_pos)-1 )){
 
+  curr_port_idx = curr_port_idx + 1
   curr_day = dates_change_pos[day]
   next_day = dates_change_pos[day+1]
   curr_weight = df_daily_port_weight[df_daily_port_weight$Date == curr_day,]
@@ -739,12 +745,10 @@ for (day in 1:(length(dates_change_pos)-1 )){
     prices = get_daily_returns_days(curr_weight$Ticker, next_day,  next_day + days(1))
     prices = data.frame(prices)
     for(stock_idx in 1:10){
-      total_fee = total_fee + abs(weight_today[stock_idx] - weight_tommrow[stock_idx]) * prices[, stock_idx]*fee_rate
+      total_fee = total_fee + port_val[curr_port_idx-1]*abs(weight_today[stock_idx] - weight_tommrow[stock_idx]) * prices[, stock_idx]*fee_rate
     }
     
-    
   } else {
-    
 
     curr_prices = get_daily_returns_days(curr_weight$Ticker, next_day,  next_day + days(1))
     curr_prices = data.frame(prices)
@@ -753,15 +757,25 @@ for (day in 1:(length(dates_change_pos)-1 )){
     next_prices = data.frame(prices)
     
       for(stock_idx in 1:10){
-        total_fee = total_fee + abs(weight_today[stock_idx]) * curr_prices[,stock_idx]*fee_rate
-        total_fee = total_fee + abs(weight_tommrow[stock_idx]) * next_prices[,stock_idx]*fee_rate
+        total_fee = total_fee + port_val[curr_port_idx-1]abs(weight_today[stock_idx]) * curr_prices[,stock_idx]*fee_rate
+        total_fee = total_fee + port_val[curr_port_idx-1]abs(weight_tommrow[stock_idx]) * next_prices[,stock_idx]*fee_rate
         
       }
-    
     }
-  
-  }
-total_fee
+}
+
+
+curr_day = as.Date("2020-12-31")
+curr_weight = df_daily_port_weight[df_daily_port_weight$Date == curr_day,]
+prices = get_daily_returns_days(curr_weight$Ticker, curr_day,  curr_day + days(1))
+prices = data.frame(prices)
+
+weight_today = curr_weight[,3:12]
+for(stock_idx in 1:10){
+  total_fee = total_fee + abs(weight_today[stock_idx]) * prices[,stock_idx]*fee_rate
+}
+
+View(total_fee)
 
 ```
 
